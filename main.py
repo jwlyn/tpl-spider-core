@@ -1,6 +1,6 @@
+import asyncio
 
-from logging.config import fileConfig
-import logging
+from config import logger
 from multiprocessing import Process
 import threading
 import config
@@ -24,6 +24,7 @@ db = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password
 def __get_task_by_sql(sql):
     cursor = db.cursor()
     cursor.execute(sql)
+    db.commit()
     row = cursor.fetchone()
     if row is None:
         return None
@@ -47,10 +48,10 @@ def __get_task_by_sql(sql):
 
 def __get_timeout_task():
     sql = """
-        update spider_task set gmt_created = NOW() where id in (
+        update spider_task set gmt_modified = NOW() where id in (
             select id
             from spider_task
-            where status ='P' AND gmt_created + '10 minutes'::INTERVAL < NOW()
+            where status ='P' AND gmt_modified + '10 minutes'::INTERVAL < NOW()
             order by gmt_created DESC 
             limit 1
         )
@@ -61,7 +62,7 @@ def __get_timeout_task():
 
 def __get_a_task():
     sql = """
-        update spider_task set status = 'P' where id in (
+        update spider_task set status = 'P', gmt_modified=NOW() where id in (
             select id
             from spider_task
             where status ='I'
@@ -73,21 +74,13 @@ def __get_a_task():
     return __get_task_by_sql(sql)
 
 
-def __update_task_finished(task_id, status='C'):
+def __update_task_finished(task_id, zip_path, status='C'):
     sql = f"""
-        update spider_task set status = '{status}' where id = '{task_id}'
+        update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}'
     """
     cursor = db.cursor()
     cursor.execute(sql)
     cursor.close()
-
-
-def __save_crawl_result(task_id,  zip_path):
-    sql = f"""
-        update spider_task set result='{zip_path}' where id={task_id};
-    """
-    cursor = db.cursor()
-    cursor.execute(sql)
     db.commit()
 
 
@@ -101,54 +94,56 @@ def __get_user_agent(key):
     return ua
 
 
-def __process_thread():
+async def __do_process():
 
     while True:
         task = __get_timeout_task()  # 优先处理超时的任务
         if task is None:
             task = __get_a_task()
+        else:
+            logger.info("获得一个超时任务 %s", task['id'])
+
         if not task:
             logger.info("no task, wait")
             time.sleep(10)
             continue
+        else:
+            logger.info("获得一个正常任务 %s", task['id'])
+
         seeds = task['seeds']
         is_grab_out_site_link = task['is_grab_out_link'] #是否抓取外部站点资源
         user_agent = __get_user_agent(task['user_agent'])
         spider = TemplateCrawler(seeds, save_base_dir=config.template_base_dir,
                                  header={'User-Agent': user_agent},
                                  grab_out_site_link=is_grab_out_site_link)
-        template_zip_file = spider.template_crawl()
-        __save_crawl_result(task['id'], template_zip_file)
-        __update_task_finished(task['id'])
-        send_email("web template download link", "http://test/TODO", task['user_id_str']) #TODO
+        template_zip_file = await spider.template_crawl()
+        __update_task_finished(task['id'], template_zip_file)
+        send_email("web template download link", "http://template-spider.com", task['user_id_str']) #TODO
 
 
-def __create_thread(n):
-    threads = []
-    for i in range(0, n):
-        t = threading.Thread(target=__process_thread)
-        threads.append(t)
-        t.start()
-
-    threads[0].join()
+def __process_thread():
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.gather(
+        __do_process(),
+    ))
+    loop.close()
 
 
 def __create_process():
-    process = []
+    process_arr = []
     process_cnt = config.max_spider_process
-    thread_per_process = config.max_spider_thread_per_process
 
     for i in range(0, process_cnt):
-        p = Process(target=__create_thread, args=(thread_per_process,))
-        process.append(p)
+        p = Process(target=__process_thread)
+        process_arr.append(p)
         p.start()
 
-    return process
+    return process_arr
 
 
 if __name__ == "__main__":
-    fileConfig('logging.ini')
-    logger = logging.getLogger()
+    logger.info("tpl-spider-web start, thread[%s]"% threading.current_thread().getName())
     process = __create_process()
-    process[0].join()
+    while True:
+        time.sleep(100)
     db.close()

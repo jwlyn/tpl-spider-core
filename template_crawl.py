@@ -1,8 +1,6 @@
 import os, re
-import logging
 from logging.config import fileConfig
-import chardet, shutil
-from request_util import spider_get
+import shutil
 from utils import get_date, get_domain, get_abs_url, format_url, get_url_file_name, get_file_name_by_type, \
     is_same_web_site_link, is_img_ext
 from datetime import datetime
@@ -14,10 +12,12 @@ import threading
 import aiohttp
 import asyncio
 import aiofiles
+from config import logger
 
 
 class TemplateCrawler(object):
-    logger = logging.getLogger()
+
+    logger = logger
     CMD_DOWNLOAD = 'download'
     CMD_QUIT = 'quit'
     FILE_TYPE_BIN = 'bin'
@@ -44,7 +44,7 @@ class TemplateCrawler(object):
     def __get_relative_report_file_path(self, path):
         return path[len(self.__get_tpl_full_path()) + 1:]
 
-    def __make_report(self):
+    async def __make_report(self):
         """
         1，标题
         2，源url
@@ -54,40 +54,40 @@ class TemplateCrawler(object):
         :return:
         """
         report_file = "%s/_report.html" % (self.__get_tpl_full_path())
-        with open(report_file, 'w+', encoding='utf-8') as f:
-            f.writelines("""
+        async with aiofiles.open(report_file, 'w', encoding='utf-8') as f:
+            await f.writelines("""
                 <center><h1>TEMPLATE REPORT</h1></center><br>\n
                 
                 <h2 style='color: red;'>1. Error report</h2><br>\n
             """)
             if len(self.error_grab_resource.keys()) > 0:
                 for url, path in self.error_grab_resource.items():
-                    f.writelines(
+                    await f.writelines(
                         "%s &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; => &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; %s <br>\n" % (url, path))
-                f.writelines("""
+                    await f.writelines("""
                     <b>To fix this error: download the url content and put them in the directory followed.</b><br>\n
                 """)
             else:
-                f.writelines("All things is ok!")
+                await f.writelines("All things is ok!")
 
-            f.writelines("""
+                await f.writelines("""
                 <hr /><br>
                 <h2>2. Template source url</h2><br>\n
             """)
             for u in self.url_list:
-                f.writelines("<a href='%s'>%s</a><br>\n" % (u, u))
+                await f.writelines("<a href='%s'>%s</a><br>\n" % (u, u))
 
-            f.writelines("""
+                await f.writelines("""
                 <hr />
                 <h2>3. Spider report (%s files)</h2><br>\n
             """ % len(self.dl_urls.keys()))
 
             for url, path in self.dl_urls.items():
-                f.writelines(
+                await f.writelines(
                     "<a href='%s'>%s</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; %s<br>\n" % (
                         url, url, self.__get_relative_report_file_path(path)))
 
-            f.writelines("""
+                await f.writelines("""
                 <br><br>
                 <hr/>
                 <center><a href='http://template-spider.com'>web template spider</a>&nbsp;|&nbsp;<a href=''>report bug</a></center>
@@ -143,20 +143,9 @@ class TemplateCrawler(object):
         return "%s/%s" % (self.__get_tpl_full_path(), self.js_dir)
 
     @staticmethod
-    def __save_text_file(content, file_abs_path, encoding='utf-8'):
-        with open(file_abs_path, "w+", encoding=encoding) as f:
-            f.writelines(content)
-
-    @staticmethod
     async def __async_save_text_file(content, file_abs_path, encoding='utf-8'):
         async with aiofiles.open(file_abs_path, "w", encoding=encoding) as f:
             await f.writelines(content)
-
-    @staticmethod
-    def __save_bin_file(rsp, file_abs_path):
-        with open(file_abs_path, 'wb') as f:
-            for chunk in rsp.iter_content(512):
-                f.write(chunk)
 
     def __prepare_dirs(self):
         """
@@ -267,9 +256,7 @@ class TemplateCrawler(object):
                 file_save_path = "%s/%s" % (self.__get_img_full_path(), file_name)
                 replace_url = "%s/%s" % (self.img_dir, file_name)
                 img['src'] = replace_url
-                # if file_name is None or len(file_name)==0:
-                #     print("ffffffffffffffff")
-                #     return False
+
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
 
             if img.get("crossorigin ") is not None:
@@ -315,7 +302,7 @@ class TemplateCrawler(object):
                 style['style'] = style['style'].replace(resource_url, replace_url)
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
 
-    def __dl_link(self, soup, url):
+    async def __dl_link(self, soup, url):
         """
         下载<link>标签里的资源，并替换html里的地址
         :param soup:
@@ -338,12 +325,12 @@ class TemplateCrawler(object):
                     file_save_path = "%s/%s" % (self.__get_css_full_path(), file_name)
                     replace_url = "%s/%s" % (self.css_dir, file_name)
                     if not self.__is_dup(abs_link, file_save_path):
-                        resp = self.__get_request(abs_link)
-                        if resp is not None:
-                            text_content = resp.text
+                        resp_text, _ = await self.__async_get_request_text(abs_link)
+                        if resp_text is not None:
+                            text_content = resp_text
                             text_content = self.__replace_and_grab_css_url(abs_link, text_content)
                             self.__set_dup_url(abs_link, file_save_path)
-                            self.__save_text_file(text_content, file_save_path)  # 存储css文件
+                            await self.__async_save_text_file(text_content, file_save_path)  # 存储css文件
 
                 css['href'] = replace_url
 
@@ -376,7 +363,7 @@ class TemplateCrawler(object):
 
         return text
 
-    def __rend_template(self, url, html):
+    async def __rend_template(self, url, html):
         """
         把从url抓到的html原始页面进行链接加工，图片，css,js下载
         :param url:
@@ -387,7 +374,13 @@ class TemplateCrawler(object):
         self.__make_template(soup, url)
         self.__dl_inner_style_img(soup, url)
         self.__dl_img(soup, url)
-        self.__dl_link(soup, url)
+        for i in range(0, config.max_retry):
+            try:
+                await self.__dl_link(soup, url)
+                break
+            except:
+                continue
+
         self.__dl_js(soup, url)
         return soup.prettify()
 
@@ -433,11 +426,25 @@ class TemplateCrawler(object):
             elif self.task_finished:
                 break
 
-    def __get_request(self, url):
-        resp = spider_get(url, self.header)
-        return resp
+    async def __async_get_request_text(self, url):
+        max_retry = config.max_retry
+        time_out = config.http_timeout
+        for i in range(1, max_retry + 1):
+            to = time_out * i
+            try:
+                logger.info("start craw[%s] %s" % (i, url))
+                async with aiohttp.ClientSession() as session:
+                    async with session.get(url, timeout=to, headers=self.header) as resp:
+                        txt =  await resp.text()
+                        encoding = resp.charset
+                        return txt, encoding
+            except Exception as e:
+                if i < max_retry:
+                    continue
+                else:
+                    return None
 
-    def template_crawl(self):
+    async def template_crawl(self):
         """
         把url_list里的网页全部抓出来当做模版，
         存储到save_path/${date}/目录下
@@ -448,26 +455,23 @@ class TemplateCrawler(object):
         """
         i = 0
         for url in self.url_list:
-            ctx = self.__get_request(url)
+            resp_text, encoding = await self.__async_get_request_text(url)
+            html = resp_text
             if self.charset is None:
-                self.charset = chardet.detect(ctx.content)['encoding']
+                self.charset = encoding
                 if self.charset is None:
                     self.charset = 'utf-8'
 
-            ctx.encoding = self.charset
-            html = ctx.text
-
-            # html = html.encode()
-            tpl_html = self.__rend_template(url, html)
+            tpl_html = await self.__rend_template(url, html)
             tpl_file_name = self.__get_file_name(url, i)
             save_file_path = "%s/%s" % (self.__get_tpl_full_path(), tpl_file_name)
-            self.__save_text_file(str(tpl_html), save_file_path)
+            await self.__async_save_text_file(str(tpl_html), save_file_path)
             self.__set_dup_url(url, save_file_path)
             i += 1
 
         self.__quit_cmd_enqueue()  # 没有新的url产生了
         self.__wait_unitl_task_finished() # 这个时候异步请求也全部落到磁盘上了
-        self.__make_report()
+        await self.__make_report()
         zip_full_path = self.__get_zip_full_path()
         self.__make_zip(zip_full_path)
         self.__clean_dl_files()
@@ -625,6 +629,11 @@ if __name__ == "__main__":
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_base_dir, header={'User-Agent': config.default_ua},
                              grab_out_site_link=True)
-    spider.template_crawl()
+
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(asyncio.gather(
+        spider.template_crawl()
+    ))
+    loop.close()
     n2 = datetime.now()
     print(n2 - n1)
