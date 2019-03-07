@@ -41,6 +41,7 @@ def __get_task_by_sql(sql):
         'is_grab_out_link': r[6],
         'gmt_modified': r[7],
         'gmt_created': r[8],
+        'file_id': r[9],
     }
 
     return task
@@ -55,7 +56,7 @@ def __get_timeout_task():
             order by gmt_created DESC 
             limit 1
         )
-        returning id, seeds, ip, user_id_str, user_agent, status, is_grab_out_link, gmt_modified, gmt_created;
+        returning id, seeds, ip, user_id_str, user_agent, status, is_grab_out_link, gmt_modified, gmt_created,file_id;
     """
     return __get_task_by_sql(sql)
 
@@ -69,7 +70,7 @@ def __get_a_task():
             order by gmt_created DESC 
             limit 1
         )
-        returning id, seeds, ip, user_id_str, user_agent, status, is_grab_out_link, gmt_modified, gmt_created;
+        returning id, seeds, ip, user_id_str, user_agent, status, is_grab_out_link, gmt_modified, gmt_created, file_id;
     """
     return __get_task_by_sql(sql)
 
@@ -118,7 +119,7 @@ async def __do_process():
                                  grab_out_site_link=is_grab_out_site_link)
         template_zip_file = await spider.template_crawl()
         __update_task_finished(task['id'], template_zip_file)
-        send_email("web template download link", "http://template-spider.com", task['user_id_str']) #TODO
+        send_email("web template download link", f"http://template-spider.com/template/{task['file_id']}", task['user_id_str'])
 
 
 def __process_thread():
