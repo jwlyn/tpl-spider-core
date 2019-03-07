@@ -7,6 +7,5 @@ tldextract
 aiohttp
 aiodns
 aiofiles
-gunicorn==19.9.0
-pywin32
+
 
