@@ -31,7 +31,7 @@ wait_download_finish_sleep = 3  # 主线程等待任务完成的每次等待时�
 
 max_spider_process = 3 # 最多开几个进程
 # max_spider_thread_per_process = 1  # 一个python进程最大可以有多少个模版爬虫同时运行
-
+wait_db_task_interval_s=5
 
 db_name = "tpl_spider"
 db_user = "postgres"

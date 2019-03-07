@@ -1,5 +1,8 @@
 import asyncio
 
+# from asyncpg import TransactionRollbackError
+from psycopg2.extensions import TransactionRollbackError
+
 from config import logger
 from multiprocessing import Process
 import threading
@@ -20,11 +23,20 @@ from utils import send_email
 db = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
                       host=dbconfig.db_url, port=dbconfig.db_port)
 
+db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
+                      host=dbconfig.db_url, port=dbconfig.db_port)
+db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
+
 
 def __get_task_by_sql(sql):
-    cursor = db.cursor()
-    cursor.execute(sql)
-    db.commit()
+    cursor = db_trans.cursor()
+    try:
+        cursor.execute(sql)
+    except TransactionRollbackError as multip_update_exp:
+        db_trans.rollback()
+        return None
+    db_trans.commit()
+
     row = cursor.fetchone()
     if row is None:
         return None
@@ -49,6 +61,7 @@ def __get_task_by_sql(sql):
 
 def __get_timeout_task():
     sql = """
+        -- start transaction isolation level repeatable read;
         update spider_task set gmt_modified = NOW() where id in (
             select id
             from spider_task
@@ -57,12 +70,14 @@ def __get_timeout_task():
             limit 1
         )
         returning id, seeds, ip, user_id_str, user_agent, status, is_grab_out_link, gmt_modified, gmt_created,file_id;
+        -- commit;
     """
     return __get_task_by_sql(sql)
 
 
 def __get_a_task():
     sql = """
+        -- start transaction isolation level repeatable read;
         update spider_task set status = 'P', gmt_modified=NOW() where id in (
             select id
             from spider_task
@@ -71,13 +86,16 @@ def __get_a_task():
             limit 1
         )
         returning id, seeds, ip, user_id_str, user_agent, status, is_grab_out_link, gmt_modified, gmt_created, file_id;
+        -- commit;
     """
     return __get_task_by_sql(sql)
 
 
 def __update_task_finished(task_id, zip_path, status='C'):
     sql = f"""
-        update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}'
+        
+        update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}';
+        
     """
     cursor = db.cursor()
     cursor.execute(sql)
@@ -106,7 +124,7 @@ async def __do_process():
 
         if not task:
             logger.info("no task, wait")
-            time.sleep(10)
+            time.sleep(config.wait_db_task_interval_s)
             continue
         else:
             logger.info("获得一个正常任务 %s", task['id'])
