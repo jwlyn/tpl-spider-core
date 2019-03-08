@@ -138,7 +138,7 @@ async def __do_process(base_craw_file_dir):
                                  grab_out_site_link=is_grab_out_site_link)
         template_zip_file = await spider.template_crawl()
         __update_task_finished(task['id'], template_zip_file)
-        send_email("web template download link", f"http://template-spider.com/template/{task['file_id']}", task['user_id_str'])
+        send_email("web template download link", f"http://template-spider.com/download/{task['file_id']}", task['user_id_str'])
 
 
 def __process_thread(base_craw_file_dir):
