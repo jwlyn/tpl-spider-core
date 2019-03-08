@@ -2,7 +2,7 @@ import asyncio
 import sys
 
 from psycopg2.extensions import TransactionRollbackError
-
+from psycopg2 import DatabaseError
 from config import logger
 from multiprocessing import Process
 import threading
@@ -34,8 +34,14 @@ def __get_task_by_sql(sql):
     try:
         cursor.execute(sql)
     except TransactionRollbackError as multip_update_exp:
+        logger.exception(multip_update_exp)
         db_trans.rollback()
         return None
+    except DatabaseError as dbe:
+        logger.exception(dbe)
+        db_trans.rollback()
+        return None
+
     db_trans.commit()
 
     row = cursor.fetchone()
