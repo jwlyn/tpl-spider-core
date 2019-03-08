@@ -2,7 +2,7 @@ import asyncio
 import sys
 
 from psycopg2.extensions import TransactionRollbackError
-from psycopg2 import DatabaseError
+from psycopg2 import DatabaseError,ProgrammingError,OperationalError
 from config import logger
 from multiprocessing import Process
 import threading
@@ -39,7 +39,7 @@ def __get_task_by_sql(sql):
         logger.exception(multip_update_exp)
         db_trans.rollback()
         return None
-    except DatabaseError as dbe:
+    except (DatabaseError, ProgrammingError, OperationalError ) as dbe:
         logger.exception(dbe)
         db_trans.rollback()
         return None
