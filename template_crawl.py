@@ -327,6 +327,7 @@ class TemplateCrawler(object):
             abs_link = get_abs_url(url, raw_link)
             if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:  # 控制是否抓外链资源
                 file_name = get_url_file_name(abs_link)
+
                 if is_img_ext(file_name):
                     file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                     replace_url = f"{self.img_dir}/{file_name}"
