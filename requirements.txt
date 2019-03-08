@@ -1,5 +1,5 @@
 lxml
-psycopg2==2.7.7
+psycopg2-binary==2.7.7
 beautifulsoup4==4.6.3
 html5lib==1.0b8
 chardet
