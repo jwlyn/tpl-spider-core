@@ -7,5 +7,4 @@ tldextract
 aiohttp
 aiodns
 aiofiles
-
-
+asyncpg

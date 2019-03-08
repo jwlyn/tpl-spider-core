@@ -627,7 +627,7 @@ if __name__ == "__main__":
 
     ]
     n1 = datetime.now()
-    spider = TemplateCrawler(url_list, save_base_dir=config.template_base_dir, header={'User-Agent': config.default_ua},
+    spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
                              grab_out_site_link=True)
 
     loop = asyncio.get_event_loop()

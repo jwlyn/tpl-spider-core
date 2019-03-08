@@ -1,6 +1,6 @@
 import asyncio
+import sys
 
-# from asyncpg import TransactionRollbackError
 from psycopg2.extensions import TransactionRollbackError
 
 from config import logger
@@ -28,7 +28,8 @@ db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, pa
 db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
 
 
-def __get_task_by_sql(sql):
+async def __get_task_by_sql(sql):
+
     cursor = db_trans.cursor()
     try:
         cursor.execute(sql)
@@ -113,7 +114,7 @@ def __get_user_agent(key):
     return ua
 
 
-async def __do_process():
+async def __do_process(base_craw_file_dir):
 
     while True:
         task = __get_timeout_task()  # 优先处理超时的任务
@@ -132,7 +133,7 @@ async def __do_process():
         seeds = task['seeds']
         is_grab_out_site_link = task['is_grab_out_link'] #是否抓取外部站点资源
         user_agent = __get_user_agent(task['user_agent'])
-        spider = TemplateCrawler(seeds, save_base_dir=config.template_base_dir,
+        spider = TemplateCrawler(seeds, save_base_dir=f"{config.template_temp_dir}/{base_craw_file_dir}",
                                  header={'User-Agent': user_agent},
                                  grab_out_site_link=is_grab_out_site_link)
         template_zip_file = await spider.template_crawl()
@@ -140,20 +141,20 @@ async def __do_process():
         send_email("web template download link", f"http://template-spider.com/template/{task['file_id']}", task['user_id_str'])
 
 
-def __process_thread():
+def __process_thread(base_craw_file_dir):
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.gather(
-        __do_process(),
+        __do_process(base_craw_file_dir),
     ))
     loop.close()
 
 
-def __create_process():
+def __create_process(base_craw_file_dir):
     process_arr = []
     process_cnt = config.max_spider_process
 
     for i in range(0, process_cnt):
-        p = Process(target=__process_thread)
+        p = Process(target=__process_thread, args=(base_craw_file_dir))
         process_arr.append(p)
         p.start()
 
@@ -162,7 +163,10 @@ def __create_process():
 
 if __name__ == "__main__":
     logger.info("tpl-spider-web start, thread[%s]"% threading.current_thread().getName())
-    process = __create_process()
+    base_craw_file_dir = sys.argv[1]
+    if not base_craw_file_dir:
+        logger.error("没有指明模版压缩文件的目录")
+    process = __create_process(base_craw_file_dir)
     while True:
         time.sleep(100)
     db.close()
