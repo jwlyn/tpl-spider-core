@@ -34,6 +34,8 @@ def __get_task_by_sql(sql):
     row=None
     try:
         cursor.execute(sql)
+        if cursor.statusmessage is None:
+            return None
         row = cursor.fetchone()
     except TransactionRollbackError as multip_update_exp:
         logger.exception(multip_update_exp)
