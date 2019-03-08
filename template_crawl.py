@@ -25,10 +25,13 @@ class TemplateCrawler(object):
 
     def __init__(self, url_list, save_base_dir, header, encoding=None, grab_out_site_link=False):
         self.url_list = list(set(list(map(lambda x: format_url(x), url_list))))
-        self.save_base_dir = "%s/%s" % (save_base_dir, get_date())
+        self.parent_save_dir = save_base_dir
+        self.date_str = get_date()
+        self.zip_save_base_abs_dir = f"{self.parent_save_dir}/{config.template_archive_dir}/{self.date_str}/"  # zip /xx/xx/archive/2019-00-01/
+        self.download_temp_abs_dir = f"{self.parent_save_dir}/{config.template_temp_dir}/{self.date_str}/"
         self.tpl_mapping = self.__get_tpl_replace_url(url_list)
         self.domain = get_domain(url_list[0])
-        self.tpl_dir, self.js_dir, self.img_dir, self.css_dir, self.other_dir = self.__prepare_dirs()
+        self.tpl_dl_dir, self.js_dir, self.img_dir, self.css_dir, self.other_dir = self.__prepare_dirs()
         self.dl_urls = {}  # 去重使用,存储 url=>磁盘绝对路径
         self.error_grab_resource = {}  # 记录 http url => relative url ，最后生成一个报告打包
         self.header = header
@@ -42,7 +45,8 @@ class TemplateCrawler(object):
         self.thread.start()
 
     def __get_relative_report_file_path(self, path):
-        return path[len(self.__get_tpl_full_path()) + 1:]
+        path = path.replace("//", "/")
+        return path[len(self.__get_tpl_full_path()):]
 
     async def __make_report(self):
         """
@@ -53,7 +57,7 @@ class TemplateCrawler(object):
         TODO js里的替换,保存原始文件和替换后文件
         :return:
         """
-        report_file = "%s/_report.html" % (self.__get_tpl_full_path())
+        report_file = f"{self.__get_tpl_full_path()}/_report.html"
         async with aiofiles.open(report_file, 'w', encoding='utf-8') as f:
             await f.writelines("""
                 <center><h1>TEMPLATE REPORT</h1></center><br>\n
@@ -63,10 +67,10 @@ class TemplateCrawler(object):
             if len(self.error_grab_resource.keys()) > 0:
                 for url, path in self.error_grab_resource.items():
                     await f.writelines(
-                        "%s &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; => &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; %s <br>\n" % (url, path))
-                    await f.writelines("""
-                    <b>To fix this error: download the url content and put them in the directory followed.</b><br>\n
-                """)
+                        f"{url} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; => &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {path} <br>\n")
+                await f.writelines("""
+                <b>To fix this error: download the url content and put them in the directory followed.</b><br>\n
+            """)
             else:
                 await f.writelines("All things is ok!")
 
@@ -75,23 +79,23 @@ class TemplateCrawler(object):
                 <h2>2. Template source url</h2><br>\n
             """)
             for u in self.url_list:
-                await f.writelines("<a href='%s'>%s</a><br>\n" % (u, u))
+                await f.writelines(f"<a href='{u}'>{u}</a><br>\n" )
 
-                await f.writelines("""
-                <hr />
-                <h2>3. Spider report (%s files)</h2><br>\n
-            """ % len(self.dl_urls.keys()))
+            await f.writelines(f"""
+            <hr />
+            <h2>3. Spider report ({len(self.dl_urls.keys())} files)</h2><br>\n
+            """ )
 
             for url, path in self.dl_urls.items():
                 await f.writelines(
-                    "<a href='%s'>%s</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; %s<br>\n" % (
+                    f"<a href='%s'>%s</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; %s <br>\n" % (
                         url, url, self.__get_relative_report_file_path(path)))
 
-                await f.writelines("""
-                <br><br>
-                <hr/>
-                <center><a href='http://template-spider.com'>web template spider</a>&nbsp;|&nbsp;<a href=''>report bug</a></center>
-            """)
+            await f.writelines("""
+            <br><br>
+            <hr/>
+            <center><a href='http://template-spider.com'>web template spider</a>&nbsp;|&nbsp;<a href=''>report bug</a></center>
+        """)
 
     def __is_dup(self, url, save_path):
         """
@@ -112,35 +116,41 @@ class TemplateCrawler(object):
         self.dl_urls[url] = file_save_path
 
     def __get_tpl_full_path(self):
-        return "%s/%s" % (self.save_base_dir, self.tpl_dir)
+        p = f"{self.download_temp_abs_dir}/{self.tpl_dl_dir}/"
+        p = p.replace("//", '/')
+        return p
 
     def __get_tpl_dir(self):
-        return self.tpl_dir
+        return self.tpl_dl_dir
 
     def __get_save_base_dir(self):
-        return self.save_base_dir
+        return self.zip_save_base_abs_dir
 
-    @staticmethod
-    def __get_zip_relative_path(full_path):
-        zip_file = "%s.zip"% full_path[len(config.template_archive_dir)+1:]
+    def __get_zip_relative_path(self, full_path):
+        """
+        /home/cxu/zip/2019-01-02/xxxx.zip   ->  2019-01-02/xxxx.zip
+        :param full_path:
+        :return:
+        """
+        zip_file = "%s.zip"% full_path[len(f'{self.parent_save_dir}/{config.template_archive_dir}/')+1:]
         return zip_file
 
     def __get_zip_full_path(self):
-        zip_base_dir = "%s/%s" % (config.template_archive_dir, get_date())
+        zip_base_dir = self.zip_save_base_abs_dir
         if not os.path.exists(zip_base_dir):
             os.makedirs(zip_base_dir)
-        zip_file_path = "%s/%s" % (zip_base_dir, self.tpl_dir)
+        zip_file_path = f"{zip_base_dir}/{self.tpl_dl_dir}"
 
         return zip_file_path
 
     def __get_img_full_path(self):
-        return "%s/%s" % (self.__get_tpl_full_path(), self.img_dir)
+        return f"{self.__get_tpl_full_path()}/{self.img_dir}"
 
     def __get_css_full_path(self):
-        return "%s/%s" % (self.__get_tpl_full_path(), self.css_dir)
+        return f"{self.__get_tpl_full_path()}/{self.css_dir}"
 
     def __get_js_full_path(self):
-        return "%s/%s" % (self.__get_tpl_full_path(), self.js_dir)
+        return f"{self.__get_tpl_full_path()}/{self.js_dir}"
 
     @staticmethod
     async def __async_save_text_file(content, file_abs_path, encoding='utf-8'):
@@ -152,10 +162,10 @@ class TemplateCrawler(object):
         根据域名+ts命名这个目录
         :return:
         """
-        template_dir = "%s_%s" % (self.domain, datetime.now().timestamp())
-        tpl_full_dir = "%s/%s" % (self.save_base_dir, template_dir)
-        dirs = [tpl_full_dir, "%s/js" % tpl_full_dir, "%s/img" % tpl_full_dir, "%s/css" % tpl_full_dir,
-                "%s/other" % tpl_full_dir]
+        template_dir = f"{self.domain}_{datetime.now().timestamp()}"  # 日期目录/下的  域名_时间戳
+        tpl_full_dir = f"{self.download_temp_abs_dir}/{template_dir}"
+        dirs = [tpl_full_dir, f"{tpl_full_dir}/js", f"{tpl_full_dir}/img", f"{tpl_full_dir}/css",
+                f"{tpl_full_dir}/other"]
         for d in dirs:
             if not os.path.exists(d):
                 os.makedirs(d)
@@ -163,7 +173,7 @@ class TemplateCrawler(object):
         return template_dir, "js", "img", "css", "other"
 
     def __get_file_name(self, url, i):
-        return "index_%s.html" % i
+        return  f"index_{i}.html"
 
     def __get_tpl_replace_url(self, url_list):
         """
@@ -231,8 +241,8 @@ class TemplateCrawler(object):
                 如果是外链引入的js就不管了,除非打开了开关
                 """
                 file_name = get_file_name_by_type(abs_link, ['js'])
-                file_save_path = "%s/%s" % (self.__get_js_full_path(), file_name)
-                replace_url = "%s/%s" % (self.js_dir, file_name)
+                file_save_path = f"{self.__get_js_full_path()}/{file_name}"
+                replace_url = f"{self.js_dir}/{file_name}"
                 scripts['src'] = replace_url
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_TEXT)
 
@@ -253,8 +263,8 @@ class TemplateCrawler(object):
 
             if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:
                 file_name = get_url_file_name(abs_link)
-                file_save_path = "%s/%s" % (self.__get_img_full_path(), file_name)
-                replace_url = "%s/%s" % (self.img_dir, file_name)
+                file_save_path = f"{self.__get_img_full_path()}/{file_name}"
+                replace_url = f"{self.img_dir}/{file_name}"
                 img['src'] = replace_url
 
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
@@ -297,8 +307,8 @@ class TemplateCrawler(object):
 
             if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:
                 file_name = get_url_file_name(abs_link)
-                file_save_path = "%s/%s" % (self.__get_img_full_path(), file_name)
-                replace_url = "%s/%s" % (self.img_dir, file_name)
+                file_save_path = f"{self.__get_img_full_path()}/{file_name}"
+                replace_url = f"{self.img_dir}/{file_name}"
                 style['style'] = style['style'].replace(resource_url, replace_url)
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
 
@@ -318,12 +328,12 @@ class TemplateCrawler(object):
             if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:  # 控制是否抓外链资源
                 file_name = get_url_file_name(abs_link)
                 if is_img_ext(file_name):
-                    file_save_path = "%s/%s" % (self.__get_img_full_path(), file_name)
-                    replace_url = "%s/%s" % (self.img_dir, file_name)
+                    file_save_path = f"{self.__get_img_full_path()}/{file_name}"
+                    replace_url = f"{self.img_dir}/{file_name}"
                     self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
                 else:
-                    file_save_path = "%s/%s" % (self.__get_css_full_path(), file_name)
-                    replace_url = "%s/%s" % (self.css_dir, file_name)
+                    file_save_path = f"{self.__get_css_full_path()}/{file_name}"
+                    replace_url = f"{self.css_dir}/{file_name}"
                     if not self.__is_dup(abs_link, file_save_path):
                         resp_text, _ = await self.__async_get_request_text(abs_link)
                         if resp_text is not None:
@@ -351,13 +361,13 @@ class TemplateCrawler(object):
                 file_name = get_url_file_name(abs_link)
                 is_img = is_img_ext(file_name)
                 if is_img:
-                    file_save_path = "%s/%s" % (self.__get_img_full_path(), file_name)
-                    replace_url = "../%s/%s" % (self.img_dir, file_name)
+                    file_save_path = f"{self.__get_img_full_path()}/{file_name}"
+                    replace_url = f"../{self.img_dir}/{file_name}"
                     self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
                     text = text.replace(relative_u, replace_url)
                 else:
-                    file_save_path = "%s/%s" % (self.__get_css_full_path(), file_name)
-                    replace_url = "%s" % (file_name)  # 由于是相对于css文件的引入,因此是平级关系, 如果是图片就需要从../img目录下
+                    file_save_path = f"{self.__get_css_full_path()}/{file_name}"
+                    replace_url = f"{file_name}"   # 由于是相对于css文件的引入,因此是平级关系, 如果是图片就需要从../img目录下
                     self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
                     text = text.replace(relative_u, replace_url)
 
@@ -432,7 +442,7 @@ class TemplateCrawler(object):
         for i in range(1, max_retry + 1):
             to = time_out * i
             try:
-                logger.info("start craw[%s] %s" % (i, url))
+                logger.info("start craw[%s] %s", i, url)
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url, timeout=to, headers=self.header) as resp:
                         txt =  await resp.text()
@@ -464,7 +474,7 @@ class TemplateCrawler(object):
 
             tpl_html = await self.__rend_template(url, html)
             tpl_file_name = self.__get_file_name(url, i)
-            save_file_path = "%s/%s" % (self.__get_tpl_full_path(), tpl_file_name)
+            save_file_path = f"{self.__get_tpl_full_path()}/{tpl_file_name}"
             await self.__async_save_text_file(str(tpl_html), save_file_path)
             self.__set_dup_url(url, save_file_path)
             i += 1
@@ -577,8 +587,8 @@ class TemplateCrawler(object):
                     self.__set_dup_url(url, save_path)
 
     def __make_zip(self, zip_full_path):
-        shutil.make_archive(zip_full_path, 'zip', self.__get_save_base_dir(), base_dir=self.__get_tpl_dir())
-        self.logger.info("zip file %s make ok", zip_full_path)
+        shutil.make_archive(zip_full_path, 'zip', self.download_temp_abs_dir, base_dir=self.__get_tpl_dir())
+        self.logger.info(f"zip file {zip_full_path}.zip make ok")
 
     def __clean_dl_files(self):
         try:

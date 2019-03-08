@@ -142,7 +142,7 @@ async def __do_process(base_craw_file_dir):
         seeds = task['seeds']
         is_grab_out_site_link = task['is_grab_out_link'] #是否抓取外部站点资源
         user_agent = __get_user_agent(task['user_agent'])
-        spider = TemplateCrawler(seeds, save_base_dir=f"{base_craw_file_dir}/{config.template_temp_dir}",
+        spider = TemplateCrawler(seeds, save_base_dir=f"{base_craw_file_dir}/",
                                  header={'User-Agent': user_agent},
                                  grab_out_site_link=is_grab_out_site_link)
         template_zip_file = await spider.template_crawl()
