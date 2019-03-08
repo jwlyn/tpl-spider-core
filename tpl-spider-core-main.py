@@ -31,8 +31,10 @@ db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
 def __get_task_by_sql(sql):
 
     cursor = db_trans.cursor()
+    row=None
     try:
         cursor.execute(sql)
+        row = cursor.fetchone()
     except TransactionRollbackError as multip_update_exp:
         logger.exception(multip_update_exp)
         db_trans.rollback()
@@ -44,7 +46,6 @@ def __get_task_by_sql(sql):
 
     db_trans.commit()
 
-    row = cursor.fetchone()
     if row is None:
         return None
 
@@ -131,7 +132,7 @@ async def __do_process(base_craw_file_dir):
 
         if not task:
             logger.info("no task, wait")
-            time.sleep(config.wait_db_task_interval_s)
+            await asyncio.sleep(config.wait_db_task_interval_s)
             continue
         else:
             logger.info("获得一个正常任务 %s", task['id'])
