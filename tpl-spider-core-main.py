@@ -23,31 +23,30 @@ from utils import send_email
 db = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
                       host=dbconfig.db_url, port=dbconfig.db_port)
 
-db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
-                      host=dbconfig.db_url, port=dbconfig.db_port)
-db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
-
 
 def __get_task_by_sql(sql):
-
+    db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
+                                host=dbconfig.db_url, port=dbconfig.db_port)
+    db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ)
     cursor = db_trans.cursor()
     row=None
     try:
         cursor.execute(sql)
         if cursor.rowcount>0:
             row = cursor.fetchone()
+            db_trans.commit()
         else:
             return None
     except TransactionRollbackError as multip_update_exp:
-        logger.exception(multip_update_exp)
+        logger.info(multip_update_exp)
         db_trans.rollback()
         return None
-    except (DatabaseError, ProgrammingError, OperationalError ) as dbe:
-        logger.exception(dbe)
+    except (DatabaseError, ProgrammingError, OperationalError) as dbe:
+        logger.info(dbe)
         db_trans.rollback()
         return None
-
-    db_trans.commit()
+    finally:
+        db_trans.close()
 
     if row is None:
         return None
@@ -143,7 +142,7 @@ async def __do_process(base_craw_file_dir):
         seeds = task['seeds']
         is_grab_out_site_link = task['is_grab_out_link'] #是否抓取外部站点资源
         user_agent = __get_user_agent(task['user_agent'])
-        spider = TemplateCrawler(seeds, save_base_dir=f"{config.template_temp_dir}/{base_craw_file_dir}",
+        spider = TemplateCrawler(seeds, save_base_dir=f"{base_craw_file_dir}/{config.template_temp_dir}",
                                  header={'User-Agent': user_agent},
                                  grab_out_site_link=is_grab_out_site_link)
         template_zip_file = await spider.template_crawl()
