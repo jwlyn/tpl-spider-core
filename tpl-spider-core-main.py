@@ -28,7 +28,7 @@ db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, pa
 db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_SERIALIZABLE)
 
 
-async def __get_task_by_sql(sql):
+def __get_task_by_sql(sql):
 
     cursor = db_trans.cursor()
     try:
@@ -138,7 +138,7 @@ async def __do_process(base_craw_file_dir):
                                  grab_out_site_link=is_grab_out_site_link)
         template_zip_file = await spider.template_crawl()
         __update_task_finished(task['id'], template_zip_file)
-        send_email("web template download link", f"http://template-spider.com/download/{task['file_id']}", task['user_id_str'])
+        send_email("web template download link", f"http://template-spider.com/get-web-template/{task['file_id']}", task['user_id_str'])
 
 
 def __process_thread(base_craw_file_dir):
@@ -154,7 +154,7 @@ def __create_process(base_craw_file_dir):
     process_cnt = config.max_spider_process
 
     for i in range(0, process_cnt):
-        p = Process(target=__process_thread, args=(base_craw_file_dir))
+        p = Process(target=__process_thread, args=(base_craw_file_dir,))
         process_arr.append(p)
         p.start()
 
@@ -164,6 +164,7 @@ def __create_process(base_craw_file_dir):
 if __name__ == "__main__":
     logger.info("tpl-spider-web start, thread[%s]"% threading.current_thread().getName())
     base_craw_file_dir = sys.argv[1]
+    logger.info("基本目录是%s", base_craw_file_dir)
     if not base_craw_file_dir:
         logger.error("没有指明模版压缩文件的目录")
     process = __create_process(base_craw_file_dir)
