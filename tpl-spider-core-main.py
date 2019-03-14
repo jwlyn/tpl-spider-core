@@ -108,8 +108,11 @@ def __update_task_finished(task_id, zip_path, status='C'):
         
     """
     cursor = db.cursor()
+    logger.info("execute sql %s", sql)
     cursor.execute(sql)
+    logger.info("execute sql %s", sql)
     cursor.close()
+    logger.info("execute sql %s", sql)
     db.commit()
     logger.info("execute sql %s", sql)
 
@@ -147,6 +150,7 @@ async def __do_process(base_craw_file_dir):
                                  header={'User-Agent': user_agent},
                                  grab_out_site_link=is_grab_out_site_link)
         template_zip_file = await spider.template_crawl()
+        logger.info("begin update task finished")
         __update_task_finished(task['id'], template_zip_file)
         send_email("web template download link", f"http://template-spider.com/get-web-template/{task['file_id']}", task['user_id_str'])
         logger.info("send email to %s, link: %s", task['user_id_str'], task['file_id'])
