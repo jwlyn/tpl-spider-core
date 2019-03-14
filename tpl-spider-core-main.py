@@ -111,6 +111,7 @@ def __update_task_finished(task_id, zip_path, status='C'):
     cursor.execute(sql)
     cursor.close()
     db.commit()
+    logger.info("execute sql %s", sql)
 
 
 def __get_user_agent(key):
@@ -127,17 +128,17 @@ async def __do_process(base_craw_file_dir):
 
     while True:
         task = __get_timeout_task()  # 优先处理超时的任务
-        if task is None:
-            task = __get_a_task()
-        else:
-            logger.info("获得一个超时任务 %s", task['id'])
 
-        if not task:
-            logger.info("no task, wait")
-            await asyncio.sleep(config.wait_db_task_interval_s)
-            continue
+        if task is not None:
+            logger.info("获得一个超时任务 %s", task['id'])
         else:
-            logger.info("获得一个正常任务 %s", task['id'])
+            task = __get_a_task()
+            if not task:
+                logger.info("no task, wait")
+                await asyncio.sleep(config.wait_db_task_interval_s)
+                continue
+            else:
+                logger.info("获得一个正常任务 %s", task['id'])
 
         seeds = task['seeds']
         is_grab_out_site_link = task['is_grab_out_link'] #是否抓取外部站点资源
