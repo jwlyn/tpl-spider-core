@@ -595,13 +595,14 @@ class TemplateCrawler(object):
         self.logger.info(f"zip file {zip_full_path}.zip make ok")
 
     async def __clean_dl_files(self):
-        aioshutil = aioify(obj=shutil, name='aishutil')
-        try:
-            #dir_to_del =
-            await aioshutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
-            #shutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
-        except Exception as e:
-            self.logger.error(e)
+        # aioshutil = aioify(obj=shutil, name='aishutil')
+        # try:
+        #     #dir_to_del =
+        #     await aioshutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
+        #     #shutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
+        # except Exception as e:
+        #     self.logger.error(e)
+        pass
 
 
 if __name__ == "__main__":
