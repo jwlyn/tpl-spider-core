@@ -132,7 +132,7 @@ class TemplateCrawler(object):
         :param full_path:
         :return:
         """
-        zip_file = "%s.zip"% full_path[len(f'{self.parent_save_dir}/{config.template_archive_dir}/')+1:]
+        zip_file = "%s.zip"% full_path[len(f'{self.parent_save_dir}/')+1:]
         return zip_file
 
     def __get_zip_full_path(self):
