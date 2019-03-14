@@ -8,3 +8,4 @@ aiohttp
 aiodns
 aiofiles
 asyncpg
+aioify

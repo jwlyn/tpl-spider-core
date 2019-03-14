@@ -1,6 +1,9 @@
 import os, re
 from logging.config import fileConfig
 import shutil
+
+import aioify as aioify
+
 from utils import get_date, get_domain, get_abs_url, format_url, get_url_file_name, get_file_name_by_type, \
     is_same_web_site_link, is_img_ext
 from datetime import datetime
@@ -485,7 +488,7 @@ class TemplateCrawler(object):
         await self.__make_report()
         zip_full_path = self.__get_zip_full_path()
         self.__make_zip(zip_full_path)
-        self.__clean_dl_files()
+        await self.__clean_dl_files()
         return self.__get_zip_relative_path(zip_full_path)
 
     def __download_thread(self):
@@ -591,9 +594,12 @@ class TemplateCrawler(object):
         shutil.make_archive(zip_full_path, 'zip', self.download_temp_abs_dir, base_dir=self.__get_tpl_dir())
         self.logger.info(f"zip file {zip_full_path}.zip make ok")
 
-    def __clean_dl_files(self):
+    async def __clean_dl_files(self):
+        aioshutil = aioify(obj=shutil, name='aishutil')
         try:
-            shutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
+            #dir_to_del =
+            await aioshutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
+            #shutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
         except Exception as e:
             self.logger.error(e)
 
