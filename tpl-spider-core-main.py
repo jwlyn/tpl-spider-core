@@ -102,11 +102,8 @@ class SpiderTask(object):
             cursor = db.cursor()
             logger.info("begin execute sql %s", sql)
             cursor.execute(sql)
-            logger.info("after execute sql %s", sql)
             cursor.close()
-            logger.info("close execute sql %s", sql)
             db.commit()
-            logger.info("commit execute sql %s", sql)
         except Exception as e:
             logger.exception(e)
         finally:
