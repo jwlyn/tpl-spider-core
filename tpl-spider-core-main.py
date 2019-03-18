@@ -18,10 +18,6 @@ from utils import send_email
 
 
 class SpiderTask(object):
-    def __init__(self):
-        self.db = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
-                          host=dbconfig.db_url, port=dbconfig.db_port)
-
     def __get_task_by_sql(self, sql):
         db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
                                     host=dbconfig.db_url, port=dbconfig.db_port)
@@ -97,17 +93,25 @@ class SpiderTask(object):
         return self.__get_task_by_sql(sql)
 
     def __update_task_finished(self, task_id, zip_path, status='C'):
-        sql = f"""
-            update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}';
-        """
-        cursor = self.db.cursor()
-        logger.info("begin execute sql %s", sql)
-        cursor.execute(sql)
-        logger.info("after execute sql %s", sql)
-        cursor.close()
-        logger.info("close execute sql %s", sql)
-        self.db.commit()
-        logger.info("commit execute sql %s", sql)
+        db = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
+                              host=dbconfig.db_url, port=dbconfig.db_port)
+        try:
+            sql = f"""
+                update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}';
+            """
+            cursor = db.cursor()
+            logger.info("begin execute sql %s", sql)
+            cursor.execute(sql)
+            logger.info("after execute sql %s", sql)
+            cursor.close()
+            logger.info("close execute sql %s", sql)
+            db.commit()
+            logger.info("commit execute sql %s", sql)
+        except Exception as e:
+            logger.exception(e)
+        finally:
+            if db:
+                db.close()
 
     def __get_user_agent(self, key):
         ua_list = config.ua_list.get(key)
