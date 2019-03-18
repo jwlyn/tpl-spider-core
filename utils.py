@@ -128,6 +128,7 @@ def send_template_mail(title, template_file, args, to_list):
     content = ""
     with open(template_file) as f:
         content = f.readlines()
+        content = ''.join(content)
     for k, v in args.items():
         content = content.replace(k, v)
 
