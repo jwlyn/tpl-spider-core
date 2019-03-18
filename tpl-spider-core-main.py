@@ -144,7 +144,7 @@ class SpiderTask(object):
             template_zip_file = await spider.template_crawl()
             logger.info("begin update task finished")
             self.__update_task_finished(task['id'], template_zip_file)
-            send_template_mail("web template download link", {"{{template_id}}":task['file_id']}, task['user_id_str'])
+            send_template_mail("web template download link", "email-download.html", {"{{template_id}}":task['file_id']}, task['user_id_str'])
             # send_email("web template download link", f"http://template-spider.com/get-web-template/{task['file_id']}", task['user_id_str'])
             logger.info("send email to %s, link: %s", task['user_id_str'], task['file_id'])
 
