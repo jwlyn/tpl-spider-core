@@ -103,18 +103,16 @@ def __get_a_task():
 
 def __update_task_finished(task_id, zip_path, status='C'):
     sql = f"""
-        
         update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}';
-        
     """
     cursor = db.cursor()
-    logger.info("execute sql %s", sql)
+    logger.info("begin execute sql %s", sql)
     cursor.execute(sql)
-    logger.info("execute sql %s", sql)
+    logger.info("after execute sql %s", sql)
     cursor.close()
-    logger.info("execute sql %s", sql)
+    logger.info("close execute sql %s", sql)
     db.commit()
-    logger.info("execute sql %s", sql)
+    logger.info("commit execute sql %s", sql)
 
 
 def __get_user_agent(key):
