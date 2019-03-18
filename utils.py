@@ -124,10 +124,20 @@ def is_img_ext(file_name):
                                        'pbm','pgm','xwd','fh','wbmp','svg','aiff','webp'))
 
 
+def send_template_mail(title, template_file, args, to_list):
+    content = ""
+    with open(template_file) as f:
+        content = f.readlines()
+    for k, v in args.items():
+        content = content.replace(k, v)
+
+    send_email(title, content, to_list)
+
+
 def send_email(title, content, to_list):
     # 三个参数：第一个为文本内容，第二个 plain 设置文本格式，第三个 utf-8 设置编码
     message = MIMEText(content, 'plain', 'utf-8')
-    message['From'] = Header(SEND_MAIL['sender'], 'utf-8')
+    message['From'] = Header(f"accelerate your web design <{SEND_MAIL['sender']}>", 'utf-8')
     message['To'] = Header("代理池管理员", 'utf-8')
     message['Subject'] = Header(title, 'utf-8')
 
