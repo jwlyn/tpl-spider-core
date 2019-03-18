@@ -146,23 +146,25 @@ class SpiderTask(object):
             send_email("web template download link", f"http://template-spider.com/get-web-template/{task['file_id']}", task['user_id_str'])
             logger.info("send email to %s, link: %s", task['user_id_str'], task['file_id'])
 
-    def __process_thread(self, base_craw_file_dir):
+    def process_thread(self, base_craw_file_dir):
+
         loop = asyncio.get_event_loop()
         loop.run_until_complete(asyncio.gather(
             self.__do_process(base_craw_file_dir),
         ))
         loop.close()
 
-    def create_process(self, base_craw_file_dir):
-        process_arr = []
-        process_cnt = config.max_spider_process
 
-        for i in range(0, process_cnt):
-            p = Process(target=self.__process_thread, args=(base_craw_file_dir,))
-            process_arr.append(p)
-            p.start()
+def create_process(base_craw_file_dir):
+    process_arr = []
+    process_cnt = config.max_spider_process
+    for i in range(0, process_cnt):
+        task = SpiderTask()
+        p = Process(target=task.process_thread, args=(base_craw_file_dir,))
+        process_arr.append(p)
+        p.start()
 
-        return process_arr
+    return process_arr
 
 
 if __name__ == "__main__":
@@ -172,8 +174,7 @@ if __name__ == "__main__":
     if not base_craw_file_dir:
         logger.error("没有指明模版压缩文件的目录")
 
-    task = SpiderTask()
-    process = task.create_process(base_craw_file_dir)
+    process = create_process(base_craw_file_dir)
     while True:
         time.sleep(100)
     db.close()
