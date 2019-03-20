@@ -10,7 +10,7 @@ from datetime import datetime
 import time
 from bs4 import BeautifulSoup
 import config
-from queue import Queue
+from queue import Queue, Empty
 import threading
 import aiohttp
 import asyncio
@@ -26,13 +26,13 @@ class TemplateCrawler(object):
     FILE_TYPE_BIN = 'bin'
     FILE_TYPE_TEXT = 'text'
 
-    def __init__(self, url_list, save_base_dir, header, encoding=None, grab_out_site_link=False):
-        self.url_list = list(set(list(map(lambda x: format_url(x), url_list))))
+    def __init__(self, url_list, save_base_dir, header, encoding=None, grab_out_site_link=False, to_single_page=False, full_site=False):
+
         self.parent_save_dir = save_base_dir
         self.date_str = get_date()
         self.zip_save_base_abs_dir = f"{self.parent_save_dir}/{config.template_archive_dir}/{self.date_str}/"  # zip /xx/xx/archive/2019-00-01/
         self.download_temp_abs_dir = f"{self.parent_save_dir}/{config.template_temp_dir}/{self.date_str}/"
-        self.tpl_mapping = self.__get_tpl_replace_url(url_list)
+        #self.tpl_mapping = self.__get_tpl_replace_url(url_list)
         self.domain = get_domain(url_list[0])
         self.tpl_dl_dir, self.js_dir, self.img_dir, self.css_dir, self.other_dir = self.__prepare_dirs()
         self.dl_urls = {}  # 去重使用,存储 url=>磁盘绝对路径
@@ -40,6 +40,12 @@ class TemplateCrawler(object):
         self.header = header
         self.charset = encoding
         self.is_grab_outer_link = grab_out_site_link
+        self.is_to_single_page=to_single_page  # 是否把图片，css, js等压缩到一个页面里
+        self.is_full_site = full_site          #是否是整站
+        self.html_link_queue = Queue() # html 页面的队列
+        for u in url_list:
+            self.html_link_queue.put(u)
+        self.downloaded_html_url = []  # 已经下载过的，保存(disk_path, file_name, url, )
         self.download_queue = Queue()  # 数据格式json  {'cmd':quit/download, "url":'http://baidu.com', "save_path":'/full/path/file.ext', 'type':'bin/text'}
         self.download_finished = False  # url消耗完毕不代表网络请求都返回了
         self.task_finished = False  #全部网络都返回， eventloop结束
@@ -81,8 +87,8 @@ class TemplateCrawler(object):
                 <hr /><br>
                 <h2>2. Template source url</h2><br>\n
             """)
-            for u in self.url_list:
-                await f.writelines(f"<a href='{u}'>{u}</a><br>\n" )
+            for disk_file, file, url in self.downloaded_html_url:
+                await f.writelines(f"<a href='{url}'>{url}</a><br>\n" )
 
             await f.writelines(f"""
             <hr />
@@ -168,7 +174,7 @@ class TemplateCrawler(object):
         template_dir = f"{self.domain}_{datetime.now().timestamp()}"  # 日期目录/下的  域名_时间戳
         tpl_full_dir = f"{self.download_temp_abs_dir}/{template_dir}"
         dirs = [tpl_full_dir, f"{tpl_full_dir}/js", f"{tpl_full_dir}/img", f"{tpl_full_dir}/css",
-                f"{tpl_full_dir}/other"]
+                f"{tpl_full_dir}/video", ]
         for d in dirs:
             if not os.path.exists(d):
                 os.makedirs(d)
@@ -192,35 +198,35 @@ class TemplateCrawler(object):
 
         return url_mp
 
-    def __make_template(self, soup, url):
-        """
-        下载到的网页里把模版链接替换掉如果有。
-        :param soup:
-        :param url:
-        :return:
-        """
-        for base_tag in soup.find_all("base"):  # 删除<base>标签
-            base_tag.decompose()
-
-        a_list = soup.find_all("a")
-        """
-            遍历全部的链接：
-            如果链接的绝对路径在url_list里：
-                替换为模版的最终保存的地址
-        """
-        try:
-            for a in a_list:
-                raw_link = a.get("href")
-                if raw_link is None:
-                    continue
-                abs_link = get_abs_url(url, raw_link)
-                if abs_link in self.url_list:
-                    tpl_link = self.tpl_mapping.get(abs_link)
-                    a['href'] = tpl_link
-        except Exception as e:
-            self.logger.info("%s: %s", a, e)
-            self.logger.exception(e)
-            raise e
+    # def __make_template(self, soup, url):
+    #     """
+    #     下载到的网页里把模版链接替换掉如果有。
+    #     :param soup:
+    #     :param url:
+    #     :return:
+    #     """
+    #     for base_tag in soup.find_all("base"):  # 删除<base>标签
+    #         base_tag.decompose()
+    #
+    #     a_list = soup.find_all("a")
+    #     """
+    #         遍历全部的链接：
+    #         如果链接的绝对路径在url_list里：
+    #             替换为模版的最终保存的地址
+    #     """
+    #     try:
+    #         for a in a_list:
+    #             raw_link = a.get("href")
+    #             if raw_link is None:
+    #                 continue
+    #             abs_link = get_abs_url(url, raw_link)
+    #             if abs_link in self.url_list:
+    #                 tpl_link = self.tpl_mapping.get(abs_link)
+    #                 a['href'] = tpl_link
+    #     except Exception as e:
+    #         self.logger.info("%s: %s", a, e)
+    #         self.logger.exception(e)
+    #         raise e
 
     def __log_error_resource(self, url, path):
         self.error_grab_resource[url] = path
@@ -385,7 +391,7 @@ class TemplateCrawler(object):
         :return:
         """
         soup = BeautifulSoup(html, "lxml")
-        self.__make_template(soup, url)
+        #  self.__make_template(soup, url) 最后再统一从磁盘拿出来进行调整
         self.__dl_inner_style_img(soup, url)
         self.__dl_img(soup, url)
         for i in range(0, config.max_retry):
@@ -396,7 +402,7 @@ class TemplateCrawler(object):
                 continue
 
         self.__dl_js(soup, url)
-        return soup.prettify()
+        return soup
 
     def __url_enqueue(self, url='', file_save_path='', file_type='text'):
         """
@@ -468,7 +474,8 @@ class TemplateCrawler(object):
         :return:
         """
         i = 0
-        for url in self.url_list:
+        url = self.html_link_queue.get(timeout=1)
+        while url is not None:
             resp_text, encoding = await self.__async_get_request_text(url)
             html = resp_text
             if self.charset is None:
@@ -476,20 +483,81 @@ class TemplateCrawler(object):
                 if self.charset is None:
                     self.charset = 'utf-8'
 
-            tpl_html = await self.__rend_template(url, html)
+            soup = await self.__rend_template(url, html)
+            tpl_html = str(soup.prettify())
+            new_url = self.__get_same_site_link(soup, url) #获取全部同网站下的链接页面，当然会检查一下是否要全栈抓取
+            for u in new_url:  # 新产生的url进入队列，用于全站抓取时候
+                self.html_link_queue.put(u)
             tpl_file_name = self.__get_file_name(url, i)
             save_file_path = f"{self.__get_tpl_full_path()}/{tpl_file_name}"
+            self.downloaded_html_url.append((save_file_path, tpl_file_name, url))  #  存储这个3元组，最后替换html页面里的地址
             await self.__async_save_text_file(str(tpl_html), save_file_path)
-            self.__set_dup_url(url, save_file_path)
+            self.__set_dup_url(url, save_file_path) # 用于去重
             i += 1
+            try:
+                url = self.html_link_queue.get(timeout=1)
+            except Empty as e:
+                break
 
+        self.logger.info("html页面分析完毕")
         self.__quit_cmd_enqueue()  # 没有新的url产生了
         self.__wait_unitl_task_finished() # 这个时候异步请求也全部落到磁盘上了
+        await self.__html_content_link_2_local() # 调整html模版（磁盘）上的link为本地的地址
         await self.__make_report()
         zip_full_path = self.__get_zip_full_path()
         self.__make_zip(zip_full_path)
         # await self.__clean_dl_files()
         return self.__get_zip_relative_path(zip_full_path)
+
+    async def __html_content_link_2_local(self):
+        """
+        本地磁盘上的html文件里的链接修正为本地的相对路径
+        :return:
+        """
+        abs_url_2_local_map = {}
+        for save_path, file_name, url in self.downloaded_html_url:
+            abs_url_2_local_map['url'] = file_name
+
+        for save_path, file_name, url in self.downloaded_html_url:
+            async with aiofiles.open(save_path, "r", encoding="utf-8") as f:
+                html = await f.read()
+                soup = BeautifulSoup(html, "lxml")
+                a_list = soup.find_all("a")
+                for a in a_list:
+                    raw_u = a.get("href")
+                    if raw_u is not None:
+                        disk_u = abs_url_2_local_map.get(raw_u)
+                        if disk_u is not None:
+                            a['href'] = disk_u
+            async with aiofiles.open(save_path, "w", encoding="utf-8") as f:
+                await f.write(soup.prettify())
+
+    def __get_same_site_link(self, soup, url):
+        """
+        获取soup里的全部页面的url
+        :param soup:
+        :param url:
+        :return:
+        """
+        new_url = []
+        if self.is_full_site:
+            a_list = soup.find_all("a")
+            try:
+                for a in a_list:
+                    raw_link = a.get("href")
+                    if raw_link is None:
+                        continue
+                    abs_link = get_abs_url(url, raw_link) #新产生的url
+                    if is_same_web_site_link(url, abs_link): # 如果是同一站点的就进入队列等待下载
+                        self.html_link_queue.put(abs_link) #进队列
+                    else: # 如果是不同网站的链接就变成绝对连接, 不过其实也不用
+                        a['href'] = abs_link
+            except Exception as e:
+                self.logger.info("%s: %s", a, e)
+                self.logger.exception(e)
+                raise e
+
+        return new_url
 
     def __download_thread(self):
         """
@@ -527,12 +595,12 @@ class TemplateCrawler(object):
                     return is_succ
             except asyncio.TimeoutError as te:
                 self.logger.error("async retry[%s] asyncio.TimeoutError:", i)
-                if i < max_retry:
+                if i < max_retry: # TODO 错误要记录
                     continue
             except Exception as e:
                 self.logger.error("async retry[%s] error: %s", i, e)
                 self.logger.exception(e)
-                if i < max_retry:
+                if i < max_retry: # TODO 错误要记录
                     self.logger.info("async retry craw[%s] %s" % (i+1, url))
                     continue
 
@@ -554,7 +622,6 @@ class TemplateCrawler(object):
                             break
                         else:
                             await fd.write(chunk)
-
             return True
 
     async def __async_download_url(self):
@@ -594,16 +661,6 @@ class TemplateCrawler(object):
         shutil.make_archive(zip_full_path, 'zip', self.download_temp_abs_dir, base_dir=self.__get_tpl_dir())
         self.logger.info(f"zip file {zip_full_path}.zip make ok")
 
-    # async def __clean_dl_files(self):
-    #     aioshutil = aioify(obj=shutil, name='aishutil')
-    #     try:
-    #         #dir_to_del =
-    #         await aioshutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
-    #         #shutil.rmtree(self.__get_tpl_full_path(), ignore_errors=True)
-    #     except Exception as e:
-    #         self.logger.error(e)
-    #     pass
-
 
 if __name__ == "__main__":
     fileConfig('logging.ini')
@@ -611,42 +668,14 @@ if __name__ == "__main__":
     动态渲染的： 'https://docs.python.org/3/library/os.html',http://www.gd-n-tax.gov.cn/gdsw/index.shtml
     需要UA：'https://stackoverflow.com/questions/13137817/how-to-download-image-using-requests',
     gb2312 : https://www.jb51.net/web/25623.html
+    css 里import https://templated.co/items/demos/intensify/index.html
     """
     url_list = [
-        # 'https://stackoverflow.com/questions/13137817/how-to-download-image-using-requests',
-        # 'http://boke1.wscso.com/',
-        # 'https://www.sfmotors.com/',
-        # 'https://www.sfmotors.com/company',
-        # 'https://www.sfmotors.com/technology',
-        # 'https://www.sfmotors.com/vehicles',
-        # 'https://www.sfmotors.com/manufacturing'
-        'https://www.getreplacer.com/index.html',
-        'https://www.getreplacer.com/icons.html',
-        'https://www.getreplacer.com/template-1.html',
-        'https://www.getreplacer.com/template-2.html',
-        'https://www.getreplacer.com/template-3.html',
-        'https://www.getreplacer.com/template-4.html',
-        'https://www.getreplacer.com/template-5.html',
-        'https://www.getreplacer.com/template-6.html',
-        'https://www.getreplacer.com/template-7.html',
-        'https://www.getreplacer.com/template-8.html',
-        'https://www.getreplacer.com/template-9.html',
-
-        'https://www.getreplacer.com/page-about.html',
-        'https://www.getreplacer.com/page-features.html',
-        'https://www.getreplacer.com/page-faq.html',
-        'https://www.getreplacer.com/page-login.html',
-        'https://www.getreplacer.com/page-register.html',
-        'https://www.getreplacer.com/page-404.html',
-        'https://www.getreplacer.com/page-soon.html',
-        'https://www.getreplacer.com/page-blog.html',
-        'https://www.getreplacer.com/page-blog-entry.html',
-
-
+        "https://prium.github.io/slick/",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True)
+                             grab_out_site_link=True, to_single_page=False, full_site=False)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.gather(

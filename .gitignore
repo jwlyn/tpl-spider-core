@@ -10,3 +10,5 @@ test.py
 *test.py
 db.sqlite3
 *.lock
+temp
+

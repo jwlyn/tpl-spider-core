@@ -14,7 +14,7 @@ from template_crawl import TemplateCrawler
 import psycopg2
 import random
 
-from utils import send_email, send_template_mail
+from utils import send_template_mail
 
 
 class SpiderTask(object):
