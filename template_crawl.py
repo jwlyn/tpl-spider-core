@@ -69,6 +69,14 @@ class TemplateCrawler(object):
         report_file = f"{self.__get_tpl_full_path()}/_report.html"
         async with aiofiles.open(report_file, 'w', encoding='utf-8') as f:
             await f.writelines("""
+                <style>
+                a.key{
+                color: green;
+                }
+                a.value{
+                
+                }
+                </style>
                 <center><h1>TEMPLATE REPORT</h1></center><br>\n
                 
                 <h2 style='color: red;'>1. Error report</h2><br>\n
@@ -88,7 +96,7 @@ class TemplateCrawler(object):
                 <h2>2. Template source url</h2><br>\n
             """)
             for disk_file, file, url in self.downloaded_html_url:
-                await f.writelines(f"<a href='{url}'>{url}</a><br>\n" )
+                await f.writelines(f"<a class='key' href='{url}'>{url}</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>  <a class='value' target='_blank' href='./{file}'>{file}</a> <br>\n" )
 
             await f.writelines(f"""
             <hr />
@@ -97,8 +105,7 @@ class TemplateCrawler(object):
 
             for url, path in self.dl_urls.items():
                 await f.writelines(
-                    f"<a href='%s'>%s</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; %s <br>\n" % (
-                        url, url, self.__get_relative_report_file_path(path)))
+                    f"<a class='key' href='{url}'>{url}</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <a class='value' target='_blank' href='{self.__get_relative_report_file_path(path)}'>{self.__get_relative_report_file_path(path)}</a> <br>\n")
 
             await f.writelines("""
             <br><br>
@@ -652,10 +659,10 @@ if __name__ == "__main__":
     需要UA：'https://stackoverflow.com/questions/13137817/how-to-download-image-using-requests',
     gb2312 : https://www.jb51.net/web/25623.html
     css 里import https://templated.co/items/demos/intensify/index.html
-    https://prium.github.io/slick/
+
     """
     url_list = [
-        "https://prium.github.io/slick/",
+        "https://baidu.com",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
