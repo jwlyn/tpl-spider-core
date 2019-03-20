@@ -103,9 +103,11 @@ def get_url_file_name(url, file_ext='css'):
         file_name = f'{file_name}.{file_ext}'
     return file_name
 
+
 if __name__=="__main__":
-    u = get_url_file_name("http://a.com?main.css?a=b;c=d")
+    u = get_url_file_name("https://fonts.googleapis.com/css?family=Montserrat:700|Open+Sans:300,400|Pacifico")
     print(u)
+
 
 def get_file_name_by_type(url, suffix_list):
     raw_name = get_url_file_name(url)
@@ -131,6 +133,7 @@ def format_url(url):
 
     return url
 
+
 def is_under_same_link_folder(url1, url2):
     """
     检查url1是否在url2的想同或者下一层级
@@ -138,8 +141,10 @@ def is_under_same_link_folder(url1, url2):
     :param url2:
     :return:
     """
-    url1 = format_url(url1)
-    return url2.startswith(url1)
+    url1 = url1[:url1.rfind("/")]
+    url2 = url2[:url2.rfind("/")]
+    return url1.startswith(url2)
+
 
 def __get_file_ext(file_name):
     _, file_extension = os.path.splitext(file_name)

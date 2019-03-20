@@ -89,14 +89,14 @@ class TemplateCrawler(object):
                 <b>To fix this error: download the url content and put them in the directory followed.</b><br>\n
             """)
             else:
-                await f.writelines("All things is ok!")
+                await f.writelines("every thing is ok!")
 
                 await f.writelines("""
                 <hr /><br>
                 <h2>2. Template source url</h2><br>\n
             """)
             for disk_file, file, url in self.downloaded_html_url:
-                await f.writelines(f"<a class='key' href='{url}'>{url}</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>  <a class='value' target='_blank' href='./{file}'>{file}</a> <br>\n" )
+                await f.writelines(f"<a target='_blank' class='key' href='{url}'>{url}</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>  <a class='value' target='_blank' href='./{file}'>{file}</a> <br>\n" )
 
             await f.writelines(f"""
             <hr />
@@ -272,12 +272,15 @@ class TemplateCrawler(object):
         url('xxxx')
         url("xxxx")
         url(xxxx)
+        http://xxxx
         :param url_src:
         :return:  xxxx
         """
         url_src = url_src.strip()
         if '"' in url_src or "'" in url_src:
             return url_src[5: -2].strip()
+        elif url_src.startswith(('http', "https")):
+            return url_src
         else:
             return url_src[4: -1].strip()
 
@@ -331,7 +334,7 @@ class TemplateCrawler(object):
                         resp_text, _ = await self.__async_get_request_text(abs_link)
                         if resp_text is not None:
                             text_content = resp_text
-                            text_content = self.__replace_and_grab_css_url(abs_link, text_content)
+                            text_content = await  self.__replace_and_grab_css_url(abs_link, text_content)
                             self.__set_dup_url(abs_link, file_save_path)
                             await self.__async_save_text_file(text_content, file_save_path)  # 存储css文件
 
@@ -343,14 +346,26 @@ class TemplateCrawler(object):
                 if css.get('integrity') is not None:
                     del css['integrity']
 
-    def __replace_and_grab_css_url(self, url, text):
+    async def __replace_and_grab_css_url(self, url, text):
+        """
+        @import url(font-awesome.min.css);
+        @import "https://fonts.googleapis.com/css?family=Montserrat:700|Open+Sans:300,400|Pacifico";
+        :param url:
+        :param text:
+        :return:
+        """
         urls = re.findall("url\(.*?\)", text)  # TODO 区分大小写
         for u in urls:
             relative_u = self.__get_style_url_link(u)
             if relative_u.lower().startswith("data:image"):  # 内嵌base64图片
                 continue
+
             abs_link = get_abs_url(url, relative_u)
-            if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:  # 控制是否抓外链资源
+            if relative_u.endswith("css"):  # 这一步把带有 @import url(xx)的忽略掉，防止和下一步重合
+                self.logger.warning("skip css file, grab in the next step: %s", abs_link)
+                continue
+
+            if self.is_grab_outer_link:  # 控制是否抓外链资源,只要抓外部资源，那么css里的全部资源都要无条件抓进来而不管是不是一个同站点的
                 file_name = get_url_file_name(abs_link)
                 is_img = is_img_ext(file_name)
                 if is_img:
@@ -363,6 +378,35 @@ class TemplateCrawler(object):
                     replace_url = f"{file_name}"   # 由于是相对于css文件的引入,因此是平级关系, 如果是图片就需要从../img目录下
                     self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
                     text = text.replace(relative_u, replace_url)
+
+        imported_css = re.findall('@import\s+["\']+(.*?)["\']', text)  # css里 @import的情况
+        imported_css2 = re.findall('@import\s+url\(.*?\)', text) # > ['@import url(font-awesome.min.css)']
+        if imported_css2 is not None:
+            for x in imported_css2:
+                x = self.__get_style_url_link(x.split()[1])
+                imported_css.append(x)
+
+        if imported_css:
+            for u in imported_css:
+                if u.startswith(("http", "https")):
+                    abs_link = u
+                else:
+                    abs_link = get_abs_url(url, u)
+
+                file_name = get_url_file_name(abs_link)
+                file_save_path = f"{self.__get_css_full_path()}/{file_name}"
+                if not self.__is_dup(abs_link, file_save_path):
+                    resp_text, _ = await self.__async_get_request_text(abs_link)
+
+                    if resp_text is not None:
+                        text_content = resp_text
+                        text_content = await self.__replace_and_grab_css_url(abs_link, text_content)
+                        self.__set_dup_url(abs_link, file_save_path)
+                        # 在存储之前要把返回的css里的@import后面内容替换掉
+                        text_content = text_content.replace(u, file_name)
+                        await self.__async_save_text_file(text_content, file_save_path)  # 存储css文件
+                    else:
+                        self.__log_error_resource(url, file_save_path)  # 下载失败的
 
         return text
 
@@ -458,6 +502,7 @@ class TemplateCrawler(object):
         """
         i = 0
         url = self.html_link_queue.get(timeout=1)
+        html_dedup_list = [url]
         while url is not None:
             tpl_file_name = self.__get_file_name(url, i)
             save_file_path = f"{self.__get_tpl_full_path()}/{tpl_file_name}"
@@ -472,15 +517,18 @@ class TemplateCrawler(object):
                     self.charset = 'utf-8'
 
             soup = await self.__rend_template(url, html)
-            tpl_html = str(soup.prettify())
+
             new_url = self.__get_same_site_link(soup, url) #获取全部同网站下的链接页面，当然会检查一下是否要全栈抓取
             for u in new_url:  # 新产生的url进入队列，用于全站抓取时候
-                if is_same_web_site_link(u, url) and is_under_same_link_folder(u, url) and self.__is_dup(u, tpl_file_name): # 同站，同目录，非重复
+                if is_same_web_site_link(u, url) and is_under_same_link_folder(u, url) and u not in html_dedup_list: # 同站，同目录，非重复
                     self.html_link_queue.put(u)
+                    html_dedup_list.append(u)
 
-            self.downloaded_html_url.append((save_file_path, tpl_file_name, url))  #  存储这个3元组，最后替换html页面里的地址
+            tpl_html = str(soup.prettify())
+            self.downloaded_html_url.append((save_file_path, tpl_file_name, url))  # 存储这个3元组，最后替换html页面里的地址
             await self.__async_save_text_file(str(tpl_html), save_file_path)
-            self.__set_dup_url(url, save_file_path) # 用于去重
+            self.__set_dup_url(url, save_file_path)  # 用于去重
+
             i += 1
             try:
                 url = self.html_link_queue.get(timeout=1)
@@ -504,7 +552,7 @@ class TemplateCrawler(object):
         """
         abs_url_2_local_map = {}
         for save_path, file_name, url in self.downloaded_html_url:
-            abs_url_2_local_map['url'] = file_name
+            abs_url_2_local_map[url] = file_name
 
         for save_path, file_name, url in self.downloaded_html_url:
             async with aiofiles.open(save_path, "r", encoding="utf-8") as f:
@@ -530,20 +578,22 @@ class TemplateCrawler(object):
         new_url = []
         if self.is_full_site:
             a_list = soup.find_all("a")
+            if a_list is not None:
+                for a in a_list:
+                    try:
+                        raw_link = a.get("href")
+                        if raw_link is None or raw_link.startswith("#"):
+                            continue
 
-            for a in a_list:
-                try:
-                    raw_link = a.get("href")
-                    if raw_link is None or raw_link.startwwith("#"):
+                        abs_link = get_abs_url(url, raw_link) #新产生的url
+                        abs_link = format_url(abs_link)
+                        a['href'] = abs_link
+                        if abs_link not in new_url:
+                            new_url.append(abs_link)
+                    except Exception as e:
+                        self.logger.info("%s: %s", a, e)
+                        self.logger.exception(e)
                         continue
-
-                    abs_link = get_abs_url(url, raw_link) #新产生的url
-                    abs_link = format_url(abs_link)
-                    new_url.append(abs_link)
-                except Exception as e:
-                    self.logger.info("%s: %s", a, e)
-                    self.logger.exception(e)
-                    continue
 
         return new_url
 
@@ -658,15 +708,14 @@ if __name__ == "__main__":
     动态渲染的： 'https://docs.python.org/3/library/os.html',http://www.gd-n-tax.gov.cn/gdsw/index.shtml
     需要UA：'https://stackoverflow.com/questions/13137817/how-to-download-image-using-requests',
     gb2312 : https://www.jb51.net/web/25623.html
-    css 里import https://templated.co/items/demos/intensify/index.html
-
+    import css  https://templated.co/items/demos/intensify/index.html
     """
     url_list = [
-        "https://baidu.com",
+        "https://templated.co/items/demos/intensify/index.html",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True, to_single_page=False, full_site=False)
+                             grab_out_site_link=True, to_single_page=False, full_site=True)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.gather(
