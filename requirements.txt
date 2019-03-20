@@ -9,3 +9,4 @@ aiodns
 aiofiles
 asyncpg
 aioify
+apscheduler==3.5.1

@@ -8,11 +8,16 @@ from multiprocessing import Process
 import threading
 import config
 import config as dbconfig
-import time
 import json
+
+from schedule_task import clean_timeout_temp_dir_and_archive
 from template_crawl import TemplateCrawler
 import psycopg2
 import random
+import time
+from apscheduler.schedulers.background import BackgroundScheduler
+from apscheduler.triggers.cron import CronTrigger
+from pytz import timezone
 
 from utils import send_template_mail
 
@@ -169,13 +174,22 @@ def create_process(base_craw_file_dir):
     return process_arr
 
 
+def setup_schedule_task(n_days_age, search_parent_dir_list):
+    time_zone = timezone("Asia/Shanghai")
+    scheduler = BackgroundScheduler(timezone=time_zone)
+    trigger = CronTrigger.from_crontab(config.delete_file_cron, timezone=time_zone)
+    scheduler.add_job(clean_timeout_temp_dir_and_archive, trigger, kwargs={"n_day": n_days_age, "parent_dir_list":search_parent_dir_list})
+
+
 if __name__ == "__main__":
     logger.info("tpl-spider-web start, thread[%s]"% threading.current_thread().getName())
     base_craw_file_dir = sys.argv[1]
     logger.info("基本目录是%s", base_craw_file_dir)
     if not base_craw_file_dir:
         logger.error("没有指明模版压缩文件的目录")
+        exit(-1)
 
+    setup_schedule_task(config.delete_file_n_days_age, [f'{base_craw_file_dir}/{config.template_temp_dir}', f'{base_craw_file_dir}/{config.template_archive_dir}'])
     process = create_process(base_craw_file_dir)
     while True:
         time.sleep(100)

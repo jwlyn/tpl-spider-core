@@ -3,6 +3,9 @@ max_retry = 3
 template_temp_dir = "temp/"
 template_archive_dir="archive/"
 
+delete_file_n_days_age = 3 #删除3天前的历史下载临时文件和zip文件
+delete_file_cron = '00   22  *  *  0'
+
 default_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36'
 
 ua_list = {
