@@ -1,6 +1,6 @@
 from datetime import datetime
 from urllib.parse import urlparse, urljoin
-import uuid,os
+import uuid,os,time, random
 import tldextract
 from email.mime.text import MIMEText
 from email.header import Header
@@ -67,13 +67,19 @@ def get_abs_url(base_url, raw_link):
     return format_url(u)
 
 
+def __get_uniq_timestr():
+    str = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
+    uniq = random.randint(10, 9999)
+    return "%s.%s" % (str, uniq)
+
+
 def get_url_file_name(url, file_ext='css'):
     """
     http://a.com?main.css?a=b;c=d;
     http://a.com/a/b/c/xx-dd;a=c;b=d
     http://res.weiunity.com/template/boke1/resource/fonts/icomoon.ttf?ngfxmq
     'https://upload.jianshu.io/users/upload_avatars/8739889/da9dcd2a-3a25-49fa-a0db-ed752b7bc6f8.png?imageMogr2/auto-orient/strip|imageView2/1/w/96/h/96'
-
+    https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800
     :param url:
     :return:
     """
@@ -81,6 +87,9 @@ def get_url_file_name(url, file_ext='css'):
     if i>0:
         start_i = url[0:i].rfind("/")
         file_name = url[start_i+1:i]
+        # return file_name
+        if "." not in file_name:
+            file_name = f'{file_name}-{__get_uniq_timestr()}.{file_ext}'
         return file_name
 
     i = url.rfind("=")
@@ -94,6 +103,9 @@ def get_url_file_name(url, file_ext='css'):
         file_name = f'{file_name}.{file_ext}'
     return file_name
 
+if __name__=="__main__":
+    u = get_url_file_name("http://a.com?main.css?a=b;c=d")
+    print(u)
 
 def get_file_name_by_type(url, suffix_list):
     raw_name = get_url_file_name(url)
@@ -111,6 +123,23 @@ def is_same_web_site_link(url1, url2):
 
     return domain1.domain == domain2.domain
 
+
+def format_url(url):
+    i=url.rfind("#")
+    if i!= -1:
+        url = url[:i]
+
+    return url
+
+def is_under_same_link_folder(url1, url2):
+    """
+    检查url1是否在url2的想同或者下一层级
+    :param url1:
+    :param url2:
+    :return:
+    """
+    url1 = format_url(url1)
+    return url2.startswith(url1)
 
 def __get_file_ext(file_name):
     _, file_extension = os.path.splitext(file_name)
