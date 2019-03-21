@@ -220,7 +220,7 @@ class TemplateCrawler(object):
                 continue
             abs_link = get_abs_url(url, raw_link)
 
-            if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:
+            if is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:
                 """
                 如果是外链引入的js就不管了,除非打开了开关
                 """
@@ -252,7 +252,7 @@ class TemplateCrawler(object):
                 continue
             abs_link = get_abs_url(url, raw_link)
 
-            if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:
+            if is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:
                 file_name = get_url_file_name(abs_link, "png")
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
@@ -352,7 +352,7 @@ class TemplateCrawler(object):
             if raw_link is None:
                 continue
             abs_link = get_abs_url(url, raw_link)
-            if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:  # 控制是否抓外链资源
+            if is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:  # 控制是否抓外链资源
                 file_name = get_url_file_name(abs_link)
 
                 if is_img_ext(file_name):
@@ -754,7 +754,7 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/authentication/forget-password.html
     """
     url_list = [
-        "https://taobao.com",
+        "https://prium.github.io/falcon/authentication/forget-password.html",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
