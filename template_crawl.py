@@ -285,7 +285,7 @@ class TemplateCrawler(object):
         else:
             return url_src[4: -1].strip()
 
-    def __dl_inner_style_img(self, soup, url):
+    def __dl_in_element_style_img(self, soup, url):
         """
         获取到html页面内嵌样式的图片资源
         <xx style='background: url(xxxxx.jpg)'>
@@ -301,12 +301,41 @@ class TemplateCrawler(object):
                 continue
             abs_link = get_abs_url(url, resource_url)
 
-            if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:
+            if is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
                 file_name = get_url_file_name(abs_link)
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
                 style['style'] = style['style'].replace(resource_url, replace_url)
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
+
+    async def __process_in_html_css_resource(self, soup, url):
+        style_css = soup.find_all("style")
+        if style_css is None:
+            return
+        for style in style_css:
+            css_content = style.text
+            if css_content is None:
+                continue
+            all_urls = re.findall('url\(.*?\)', css_content)
+            if all_urls is not None:
+                for raw_u in all_urls:
+                    u = self.__get_style_url_link(raw_u) # > url('xxx') or url(xxx)
+                    if is_inline_resource(u):  # 内嵌base64图片
+                        continue
+                    abs_link = get_abs_url(url, u)
+                    if is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
+                        file_name = get_url_file_name(abs_link)
+                        if is_img_ext(file_name):
+                            file_save_path = f"{self.__get_img_full_path()}/{file_name}"
+                            replace_url = f"{self.img_dir}/{file_name}"
+                        else:
+                            file_save_path = f"{self.__get_css_full_path()}/{file_name}"
+                            replace_url = f"{self.css_dir}/{file_name}"
+                        css_content = css_content.replace(raw_u, f'url({replace_url})')
+                        self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
+                    else: # 替换，特别是以//开头那种url
+                        css_content = css_content.replace(raw_u, f'url({abs_link})')
+                style['text'] = css_content
 
     async def __dl_link(self, soup, url):
         """
@@ -316,6 +345,8 @@ class TemplateCrawler(object):
         :return:
         """
         css_src = soup.find_all("link")
+        if css_src is None:
+            return
         for css in css_src:
             raw_link = css.get("href")
             if raw_link is None:
@@ -344,8 +375,6 @@ class TemplateCrawler(object):
                 css['href'] = replace_url
             else: # 修正link url为绝对链接地址
                 css['href'] = abs_link
-
-
 
             # 将跨域锁定和来源校验关闭
             if css.get("crossorigin") is not None:
@@ -425,10 +454,11 @@ class TemplateCrawler(object):
         :return:
         """
         soup = BeautifulSoup(html, "lxml")
-        self.__dl_inner_style_img(soup, url)
+        self.__dl_in_element_style_img(soup, url)
         self.__dl_img(soup, url)
         await self.__dl_link(soup, url)
         self.__dl_js(soup, url)
+        await self.__process_in_html_css_resource(soup, url)
         return soup
 
     def __url_enqueue(self, url='', file_save_path='', file_type='text'):
@@ -493,7 +523,6 @@ class TemplateCrawler(object):
                 else:
                     logger.exception(e)
         return  None, None
-
 
     async def template_crawl(self):
         """
@@ -725,7 +754,7 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/authentication/forget-password.html
     """
     url_list = [
-        "https://baidu.com",
+        "https://taobao.com",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
