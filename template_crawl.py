@@ -1,11 +1,8 @@
 import os, re
 from logging.config import fileConfig
 import shutil
-
-import aioify as aioify
-
 from utils import get_date, get_domain, get_abs_url, format_url, get_url_file_name, get_file_name_by_type, \
-    is_same_web_site_link, is_img_ext, is_under_same_link_folder
+    is_same_web_site_link, is_img_ext, is_under_same_link_folder, is_page_url, is_inline_resource
 from datetime import datetime
 import time
 from bs4 import BeautifulSoup
@@ -32,7 +29,6 @@ class TemplateCrawler(object):
         self.date_str = get_date()
         self.zip_save_base_abs_dir = f"{self.parent_save_dir}/{config.template_archive_dir}/{self.date_str}/"  # zip /xx/xx/archive/2019-00-01/
         self.download_temp_abs_dir = f"{self.parent_save_dir}/{config.template_temp_dir}/{self.date_str}/"
-        #self.tpl_mapping = self.__get_tpl_replace_url(url_list)
         self.domain = get_domain(url_list[0])
         self.tpl_dl_dir, self.js_dir, self.img_dir, self.css_dir, self.other_dir = self.__prepare_dirs()
         self.dl_urls = {}  # 去重使用,存储 url=>磁盘绝对路径
@@ -42,13 +38,13 @@ class TemplateCrawler(object):
         self.is_grab_outer_link = grab_out_site_link
         self.is_to_single_page=to_single_page  # 是否把图片，css, js等压缩到一个页面里
         self.is_full_site = full_site          #是否是整站
-        self.html_link_queue = Queue() # html 页面的队列
+        self.html_link_queue = Queue()  # html 页面的队列
         for u in url_list:
             self.html_link_queue.put(u)
         self.downloaded_html_url = []  # 已经下载过的，保存(disk_path, file_name, url, )
         self.download_queue = Queue()  # 数据格式json  {'cmd':quit/download, "url":'http://baidu.com', "save_path":'/full/path/file.ext', 'type':'bin/text'}
         self.download_finished = False  # url消耗完毕不代表网络请求都返回了
-        self.task_finished = False  #全部网络都返回， eventloop结束
+        self.task_finished = False  # 全部网络都返回， eventloop结束
 
         self.thread = threading.Thread(target=self.__download_thread)
         self.thread.start()
@@ -86,20 +82,21 @@ class TemplateCrawler(object):
                     await f.writelines(
                         f"{url} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; => &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {path} <br>\n")
                 await f.writelines("""
-                <b>To fix this error: download the url content and put them in the directory followed.</b><br>\n
+                <b>To fix this error: download the url content and put them in the followed directory.</b><br>\n
             """)
             else:
                 await f.writelines("every thing is ok!")
-
-                await f.writelines("""
-                <hr /><br>
-                <h2>2. Template source url</h2><br>\n
-            """)
+            # #===========================================用户输入的原始页面+派生的html
+            await f.writelines("""
+            <hr /><br>
+            <h2>2. Template source url</h2><br>\n
+        """)
             for disk_file, file, url in self.downloaded_html_url:
                 await f.writelines(f"<a target='_blank' class='key' href='{url}'>{url}</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>  <a class='value' target='_blank' href='./{file}'>{file}</a> <br>\n" )
-
+            # #######################===========全部下载资源
             await f.writelines(f"""
             <hr />
+            
             <h2>3. Spider report ({len(self.dl_urls.keys())} files)</h2><br>\n
             """ )
 
@@ -123,7 +120,7 @@ class TemplateCrawler(object):
         if url in self.dl_urls.keys():
             save_path2 = self.dl_urls.get(url)
             if save_path == save_path2:
-                self.logger.info("cached %s", url)
+                self.logger.debug("cached %s", url)
                 return True
 
         return False
@@ -254,7 +251,7 @@ class TemplateCrawler(object):
             abs_link = get_abs_url(url, raw_link)
 
             if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:
-                file_name = get_url_file_name(abs_link)
+                file_name = get_url_file_name(abs_link, "js")
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
                 img['src'] = replace_url
@@ -296,7 +293,7 @@ class TemplateCrawler(object):
         for style in inner_style_node:
             resource_url = re.findall('url\(.*?\)', style.get("style"))[0]  # TODO 遍历而非取第一个，匹配到全部
             resource_url = self.__get_style_url_link(resource_url)
-            if resource_url.lower().startswith("data:image"):  # 内嵌base64图片
+            if is_inline_resource(resource_url):  # 内嵌base64图片
                 continue
             abs_link = get_abs_url(url, resource_url)
 
@@ -357,7 +354,7 @@ class TemplateCrawler(object):
         urls = re.findall("url\(.*?\)", text)  # TODO 区分大小写
         for u in urls:
             relative_u = self.__get_style_url_link(u)
-            if relative_u.lower().startswith("data:image"):  # 内嵌base64图片
+            if is_inline_resource(relative_u):  # 内嵌base64图片
                 continue
 
             abs_link = get_abs_url(url, relative_u)
@@ -479,9 +476,11 @@ class TemplateCrawler(object):
         for i in range(1, max_retry + 1):
             to = time_out * i
             try:
-                logger.info("start craw[%s] %s", i, url)
+                logger.info("async craw[%s] %s", i, url)
                 async with aiohttp.ClientSession() as session:
                     async with session.get(url, timeout=to, headers=self.header) as resp:
+                        if resp.status!=200:
+                            continue
                         txt =  await resp.text()
                         encoding = resp.charset
                         return txt, encoding
@@ -518,7 +517,7 @@ class TemplateCrawler(object):
 
             soup = await self.__rend_template(url, html)
 
-            new_url = self.__get_same_site_link(soup, url) #获取全部同网站下的链接页面，当然会检查一下是否要全栈抓取
+            new_url = self.__get_same_site_link(soup, url)  # 获取全部同网站下的链接页面，当然会检查一下是否要全栈抓取
             for u in new_url:  # 新产生的url进入队列，用于全站抓取时候
                 if is_same_web_site_link(u, url) and is_under_same_link_folder(u, url) and u not in html_dedup_list: # 同站，同目录，非重复
                     self.html_link_queue.put(u)
@@ -582,7 +581,7 @@ class TemplateCrawler(object):
                 for a in a_list:
                     try:
                         raw_link = a.get("href")
-                        if raw_link is None or raw_link.startswith("#"):
+                        if raw_link is None or raw_link.startswith("#") or not is_page_url(raw_link):
                             continue
 
                         abs_link = get_abs_url(url, raw_link) #新产生的url
@@ -650,19 +649,25 @@ class TemplateCrawler(object):
             return is_succ
 
     async def __do_download(self, session, url, header, file_save_path, file_type, to):
-        async with session.get(url, timeout=to, headers=header) as response:
-            if file_type == self.FILE_TYPE_TEXT:
-                text = await response.text()
-                await self.__async_save_text_file(text, file_save_path)
-            else:
-                async with aiofiles.open(file_save_path, 'wb') as fd:
-                    while True:
-                        chunk = await response.content.read(512)
-                        if not chunk:
-                            break
-                        else:
-                            await fd.write(chunk)
-            return True
+        try:
+            async with session.get(url, timeout=to, headers=header) as response:
+                if response.status!=200:
+                    return False
+
+                if file_type == self.FILE_TYPE_TEXT:
+                    text = await response.text()
+                    await self.__async_save_text_file(text, file_save_path)
+                else:
+                    async with aiofiles.open(file_save_path, 'wb') as fd:
+                        while True:
+                            chunk = await response.content.read(512)
+                            if not chunk:
+                                break
+                            else:
+                                await fd.write(chunk)
+                return True
+        except Exception as e:
+            return False
 
     async def __async_download_url(self):
         """
@@ -709,13 +714,15 @@ if __name__ == "__main__":
     需要UA：'https://stackoverflow.com/questions/13137817/how-to-download-image-using-requests',
     gb2312 : https://www.jb51.net/web/25623.html
     import css  https://templated.co/items/demos/intensify/index.html
+    https://prium.github.io/falcon/
+    https://prium.github.io/falcon/authentication/forget-password.html
     """
     url_list = [
-        "https://templated.co/items/demos/intensify/index.html",
+        "https://prium.github.io/falcon/",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True, to_single_page=False, full_site=True)
+                             grab_out_site_link=False, to_single_page=False, full_site=True)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.gather(

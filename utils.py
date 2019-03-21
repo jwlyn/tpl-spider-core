@@ -80,6 +80,7 @@ def get_url_file_name(url, file_ext='css'):
     http://res.weiunity.com/template/boke1/resource/fonts/icomoon.ttf?ngfxmq
     'https://upload.jianshu.io/users/upload_avatars/8739889/da9dcd2a-3a25-49fa-a0db-ed752b7bc6f8.png?imageMogr2/auto-orient/strip|imageView2/1/w/96/h/96'
     https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800
+    https://www.googletagmanager.com/gtag/js?id=UA-122907869-1
     :param url:
     :return:
     """
@@ -105,7 +106,7 @@ def get_url_file_name(url, file_ext='css'):
 
 
 if __name__=="__main__":
-    u = get_url_file_name("https://fonts.googleapis.com/css?family=Montserrat:700|Open+Sans:300,400|Pacifico")
+    u = get_url_file_name("https://www.googletagmanager.com/gtag/js?id=UA-122907869-1", "js")
     print(u)
 
 
@@ -156,6 +157,29 @@ def is_img_ext(file_name):
                                        'jpc','jp2','jpf','jb2','swc','aiff','wbmp','xbm',\
                                        'tif','jfif','ras','cmx','ico','cod','pnm',\
                                        'pbm','pgm','xwd','fh','wbmp','svg','aiff','webp'))
+
+
+def is_page_url(a_href):
+    """
+    有的url是Email地址，这个没办法抓
+    :param a_href:
+    :return:
+    """
+    if a_href and not a_href.lower().startswith(("mailto:", "tel:", "javascript:", "ftp:", "file:")):
+        return True
+    else:
+        return False
+
+
+def is_inline_resource(resource_content):
+    """
+
+    url(data:application/x-font-ttf;charset=utf-8;base64,AAEAAA)
+    url(data:image)
+    :param resource_content:
+    :return:
+    """
+    return resource_content and resource_content.lower().startswith(("data:", ))
 
 
 def send_template_mail(title, template_file, args, to_list):
