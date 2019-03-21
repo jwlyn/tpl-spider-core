@@ -234,6 +234,8 @@ class TemplateCrawler(object):
                     del scripts['crossorigin']
                 if scripts.get('integrity') is not None:
                     del scripts['integrity']
+            else:
+                scripts['src'] = abs_link
 
     def __dl_img(self, soup, url):
         """
@@ -251,12 +253,14 @@ class TemplateCrawler(object):
             abs_link = get_abs_url(url, raw_link)
 
             if is_same_web_site_link(url, abs_link) is True or self.is_grab_outer_link:
-                file_name = get_url_file_name(abs_link, "js")
+                file_name = get_url_file_name(abs_link, "png")
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
                 img['src'] = replace_url
 
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
+            else: # 修正为绝对链接
+                img['src'] = abs_link
 
             if img.get("crossorigin ") is not None:
                 del img['crossorigin ']
@@ -334,14 +338,20 @@ class TemplateCrawler(object):
                             text_content = await  self.__replace_and_grab_css_url(abs_link, text_content)
                             self.__set_dup_url(abs_link, file_save_path)
                             await self.__async_save_text_file(text_content, file_save_path)  # 存储css文件
+                        else:
+                            self.__log_error_resource(abs_link, file_save_path)
 
                 css['href'] = replace_url
+            else: # 修正link url为绝对链接地址
+                css['href'] = abs_link
 
-                # 将跨域锁定和来源校验关闭
-                if css.get("crossorigin") is not None:
-                    del css['crossorigin']
-                if css.get('integrity') is not None:
-                    del css['integrity']
+
+
+            # 将跨域锁定和来源校验关闭
+            if css.get("crossorigin") is not None:
+                del css['crossorigin']
+            if css.get('integrity') is not None:
+                del css['integrity']
 
     async def __replace_and_grab_css_url(self, url, text):
         """
@@ -415,16 +425,9 @@ class TemplateCrawler(object):
         :return:
         """
         soup = BeautifulSoup(html, "lxml")
-        #  self.__make_template(soup, url) 最后再统一从磁盘拿出来进行调整
         self.__dl_inner_style_img(soup, url)
         self.__dl_img(soup, url)
-        for i in range(0, config.max_retry):
-            try:
-                await self.__dl_link(soup, url)
-                break
-            except:
-                continue
-
+        await self.__dl_link(soup, url)
         self.__dl_js(soup, url)
         return soup
 
@@ -483,12 +486,14 @@ class TemplateCrawler(object):
                             continue
                         txt =  await resp.text()
                         encoding = resp.charset
-                        return txt, encoding
+                return txt, encoding
             except Exception as e:
                 if i < max_retry:
                     continue
                 else:
-                    return None
+                    logger.exception(e)
+        return  None, None
+
 
     async def template_crawl(self):
         """
@@ -640,6 +645,8 @@ class TemplateCrawler(object):
                 if i < max_retry:
                     self.logger.info("async retry craw[%s] %s" % (i+1, url))
                     continue
+            except TypeError as te:
+                return is_succ
 
         return is_succ # 这个地方不能删除，如果返回False, 上层会记录错误的抓取并最终体现在report里
 
@@ -718,11 +725,11 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/authentication/forget-password.html
     """
     url_list = [
-        "https://prium.github.io/falcon/",
+        "https://baidu.com",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
-                             grab_out_site_link=False, to_single_page=False, full_site=True)
+                             grab_out_site_link=False, to_single_page=False, full_site=False)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.gather(

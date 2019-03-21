@@ -67,6 +67,7 @@ def get_abs_url(base_url, raw_link):
     return format_url(u)
 
 
+
 def __get_uniq_timestr():
     str = time.strftime("%Y-%m-%d_%H-%M-%S", time.localtime())
     uniq = random.randint(10, 9999)
@@ -107,6 +108,9 @@ def get_url_file_name(url, file_ext='css'):
 
 if __name__=="__main__":
     u = get_url_file_name("https://www.googletagmanager.com/gtag/js?id=UA-122907869-1", "js")
+    print(u)
+
+    u = get_abs_url("https://taobao.com", "&#x2F;&#x2F;s.taobao.com&#x2F;search?spm=1.7274553.1997520241-2.2.TpEKPQ&amp;q=短裤&amp;refpid=430145_1006&amp;source=tbsy&amp;style=grid&amp;tab=all&amp;pvid=d0f2ec2810bcec0d5a16d5283ce59f69")
     print(u)
 
 
