@@ -1,8 +1,9 @@
 import os, re
 from logging.config import fileConfig
 import shutil
-from utils import get_date, get_domain, get_abs_url, format_url, get_url_file_name, get_file_name_by_type, \
-    is_same_web_site_link, is_img_ext, is_under_same_link_folder, is_page_url, is_inline_resource
+from utils import get_date, get_domain, get_abs_url, format_url, \
+    is_same_web_site_link, is_img_ext, is_under_same_link_folder, is_page_url, is_inline_resource, \
+    get_file_name_from_url
 from datetime import datetime
 import time
 from bs4 import BeautifulSoup
@@ -220,11 +221,11 @@ class TemplateCrawler(object):
                 continue
             abs_link = get_abs_url(url, raw_link)
 
-            if is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:
+            if is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
                 """
                 如果是外链引入的js就不管了,除非打开了开关
                 """
-                file_name = get_file_name_by_type(abs_link, ['js'])
+                file_name = get_file_name_from_url(abs_link, "js")
                 file_save_path = f"{self.__get_js_full_path()}/{file_name}"
                 replace_url = f"{self.js_dir}/{file_name}"
                 scripts['src'] = replace_url
@@ -247,13 +248,12 @@ class TemplateCrawler(object):
         images = soup.find_all("img")
         for img in images:
             raw_link = img.get("src")
-            if raw_link is None or raw_link.lower().strip().startswith(
-                    'data:image'):  # 跳过base64内嵌图片 <img src='data:image...'/>
+            if raw_link is None or is_inline_resource(raw_link):  # 跳过base64内嵌图片 <img src='data:image...'/>
                 continue
             abs_link = get_abs_url(url, raw_link)
 
             if is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:
-                file_name = get_url_file_name(abs_link, "png")
+                file_name = get_file_name_from_url(abs_link, "png")
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
                 img['src'] = replace_url
@@ -302,7 +302,7 @@ class TemplateCrawler(object):
             abs_link = get_abs_url(url, resource_url)
 
             if is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
-                file_name = get_url_file_name(abs_link)
+                file_name = get_file_name_from_url(abs_link, 'png')
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
                 style['style'] = style['style'].replace(resource_url, replace_url)
@@ -324,7 +324,7 @@ class TemplateCrawler(object):
                         continue
                     abs_link = get_abs_url(url, u)
                     if is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
-                        file_name = get_url_file_name(abs_link)
+                        file_name = get_file_name_from_url(abs_link)
                         if is_img_ext(file_name):
                             file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                             replace_url = f"{self.img_dir}/{file_name}"
@@ -335,7 +335,7 @@ class TemplateCrawler(object):
                         self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
                     else: # 替换，特别是以//开头那种url
                         css_content = css_content.replace(raw_u, f'url({abs_link})')
-                style['text'] = css_content
+                style.string = css_content
 
     async def __dl_link(self, soup, url):
         """
@@ -353,7 +353,7 @@ class TemplateCrawler(object):
                 continue
             abs_link = get_abs_url(url, raw_link)
             if is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:  # 控制是否抓外链资源
-                file_name = get_url_file_name(abs_link)
+                file_name = get_file_name_from_url(abs_link, 'css')
 
                 if is_img_ext(file_name):
                     file_save_path = f"{self.__get_img_full_path()}/{file_name}"
@@ -402,7 +402,7 @@ class TemplateCrawler(object):
                 continue
 
             if self.is_grab_outer_link:  # 控制是否抓外链资源,只要抓外部资源，那么css里的全部资源都要无条件抓进来而不管是不是一个同站点的
-                file_name = get_url_file_name(abs_link)
+                file_name = get_file_name_from_url(abs_link, 'css')
                 is_img = is_img_ext(file_name)
                 if is_img:
                     file_save_path = f"{self.__get_img_full_path()}/{file_name}"
@@ -429,7 +429,7 @@ class TemplateCrawler(object):
                 else:
                     abs_link = get_abs_url(url, u)
 
-                file_name = get_url_file_name(abs_link)
+                file_name = get_file_name_from_url(abs_link, 'css')
                 file_save_path = f"{self.__get_css_full_path()}/{file_name}"
                 if not self.__is_dup(abs_link, file_save_path):
                     resp_text, _ = await self.__async_get_request_text(abs_link)
@@ -446,14 +446,14 @@ class TemplateCrawler(object):
 
         return text
 
-    async def __rend_template(self, url, html):
+    async def __rend_template(self, soup, url):
         """
         把从url抓到的html原始页面进行链接加工，图片，css,js下载
         :param url:
         :param html:
         :return:
         """
-        soup = BeautifulSoup(html, "lxml")
+
         self.__dl_in_element_style_img(soup, url)
         self.__dl_img(soup, url)
         await self.__dl_link(soup, url)
@@ -524,6 +524,18 @@ class TemplateCrawler(object):
                     logger.exception(e)
         return  None, None
 
+    def __pre_process_page(self, soup, url):
+        delete_node_attr = {"link": ("rel", "dns-prefetch"),}
+        for k, v in delete_node_attr.items():
+            nodes = soup.find_all(k)
+            if nodes:
+                for n in nodes:
+                    attr_name, attr_val=v
+                    attr = n.get(attr_name)
+                    if attr and attr_val in attr:
+                        n.decompose()
+        return soup
+
     async def template_crawl(self):
         """
         把url_list里的网页全部抓出来当做模版，
@@ -549,7 +561,9 @@ class TemplateCrawler(object):
                 if self.charset is None:
                     self.charset = 'utf-8'
 
-            soup = await self.__rend_template(url, html)
+            soup = BeautifulSoup(html, "lxml")
+            soup = self.__pre_process_page(soup, url)
+            soup = await self.__rend_template(soup, url)
 
             new_url = self.__get_same_site_link(soup, url)  # 获取全部同网站下的链接页面，当然会检查一下是否要全栈抓取
             for u in new_url:  # 新产生的url进入队列，用于全站抓取时候
@@ -754,11 +768,11 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/authentication/forget-password.html
     """
     url_list = [
-        "https://prium.github.io/falcon/authentication/forget-password.html",
+        "https://taobao.com",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
-                             grab_out_site_link=False, to_single_page=False, full_site=False)
+                             grab_out_site_link=True, to_single_page=False, full_site=False)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.gather(

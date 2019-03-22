@@ -6,7 +6,8 @@ from email.mime.text import MIMEText
 from email.header import Header
 from config import SEND_MAIL
 from smtplib import SMTP_SSL
-import logging
+import logging,re
+from slugify import slugify
 
 """
 urlparse.urlparse("http://some.page.pl/nothing.py;someparam=some;otherparam=other?query1=val1&query2=val2#frag")
@@ -91,7 +92,8 @@ def get_url_file_name(url, file_ext='css'):
         file_name = url[start_i+1:i]
         # return file_name
         if "." not in file_name:
-            file_name = f'{file_name}-{__get_uniq_timestr()}.{file_ext}'
+            file_name = f'{file_name}-{__get_uniq_timestr()}'
+            file_name = slugify(f"{file_name}.{file_ext}")
         return file_name
 
     i = url.rfind("=")
@@ -106,29 +108,13 @@ def get_url_file_name(url, file_ext='css'):
     return file_name
 
 
-if __name__=="__main__":
-    u = get_url_file_name("https://www.googletagmanager.com/gtag/js?id=UA-122907869-1", "js")
-    print(u)
-
-    u = get_abs_url("https://taobao.com", "&#x2F;&#x2F;s.taobao.com&#x2F;search?spm=1.7274553.1997520241-2.2.TpEKPQ&amp;q=短裤&amp;refpid=430145_1006&amp;source=tbsy&amp;style=grid&amp;tab=all&amp;pvid=d0f2ec2810bcec0d5a16d5283ce59f69")
-    print(u)
-
-
-def get_file_name_by_type(url, suffix_list):
-    raw_name = get_url_file_name(url)
-    for suffix in suffix_list:
-        if raw_name.endswith(".%s"%suffix):
-            return raw_name
-
-    else:
-        return "%s.%s"%(str(uuid.uuid4()), 'unknown')
-
-
 def is_same_web_site_link(url1, url2):
-    domain1 = tldextract.extract(url1)
-    domain2 = tldextract.extract(url2)
+    info1 = tldextract.extract(url1)
+    info2 = tldextract.extract(url2)
+    domain1 = f'{info1[0]}.{info1[1]}.{info1[2]}'
+    domain2 = f'{info2[0]}.{info2[1]}.{info2[2]}'
 
-    return domain1.domain == domain2.domain
+    return domain1==domain2
 
 
 def format_url(url):
@@ -211,3 +197,38 @@ def send_email(title, content, to_list):
         logger.info("Successfully sent email")
     except Exception as e:
         logger.error("Error: unable to send email")
+
+
+def get_file_name_from_url(url, ext='css'):
+    temp = urlparse(url)
+    path = temp.path
+    q = temp.query
+    if len(path)>1:
+        base_file_name = os.path.basename(path)
+    else:
+        base_file_name = os.path.basename(q)
+
+    if len(base_file_name) <=0:
+        base_file_name = __get_uniq_timestr()
+
+    p = re.compile("[\"'|\\/*:?<>]")
+    base_file_name = re.sub(p, "-", base_file_name)
+
+    if '.' not in base_file_name:
+        base_file_name = f"{base_file_name}.{ext}"
+    return base_file_name
+
+
+if __name__=="__main__":
+    urls_test = [
+    "http://a.com?main.css?a=b;c=d;",
+    "http://a.com/a/b/c/xx-dd;a=c;b=d",
+    "http://res.weiunity.com/template/boke1/resource/fonts/icomoon.ttf?ngfxmq",
+    "https://upload.jianshu.io/users/upload_avatars/8739889/da9dcd2a-3a25-49fa-a0db-ed752b7bc6f8.png?imageMogr2/auto-orient/strip|imageView2/1/w/96/h/96'",
+    "https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800",
+    "https://www.googletagmanager.com/gtag/js?id=UA-122907869-1",
+    "https://fu.com/a/ttdd.html",
+    "http://g.alicdn.com/??kissy/k/6.2.4/seed-min.js,kg/global-util/1.0.7/index-min.js,tb/tracker/4.3.12/index.js,kg/tb-nav/2.5.3/index-min.js,secdev/sufei_data/3.3.5/index.js",
+    ]
+    for u in urls_test:
+        print(get_file_name_from_url(u))
