@@ -24,8 +24,18 @@ class TemplateCrawler(object):
     FILE_TYPE_BIN = 'bin'
     FILE_TYPE_TEXT = 'text'
 
-    def __init__(self, url_list, save_base_dir, header, encoding=None, grab_out_site_link=False, to_single_page=False, full_site=False):
+    def __init__(self, url_list, save_base_dir, header, encoding=None, grab_out_site_link=False, to_single_page=False, full_site=False, ref_model=False):
+        """
 
+        :param url_list:
+        :param save_base_dir:
+        :param header:
+        :param encoding:
+        :param grab_out_site_link:
+        :param to_single_page:
+        :param full_site:
+        :param ref_model: 是否是盗链模式，如果是盗链模式那么grab_out_site_link强制为False
+        """
         self.parent_save_dir = save_base_dir
         self.date_str = get_date()
         self.zip_save_base_abs_dir = f"{self.parent_save_dir}/{config.template_archive_dir}/{self.date_str}/"  # zip /xx/xx/archive/2019-00-01/
@@ -37,6 +47,9 @@ class TemplateCrawler(object):
         self.header = header
         self.charset = encoding
         self.is_grab_outer_link = grab_out_site_link
+        self.is_ref_model= ref_model
+        if self.is_ref_model:
+            self.is_grab_outer_link = False  # 盗链模式下，一定不抓外部的资源,内部资源也会被改写绝对路径
         self.is_to_single_page=to_single_page  # 是否把图片，css, js等压缩到一个页面里
         self.is_full_site = full_site          #是否是整站
         self.html_link_queue = Queue()  # html 页面的队列
@@ -221,7 +234,9 @@ class TemplateCrawler(object):
                 continue
             abs_link = get_abs_url(url, raw_link)
 
-            if is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
+            if self.is_ref_model:
+                scripts['src'] = abs_link
+            elif is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
                 """
                 如果是外链引入的js就不管了,除非打开了开关
                 """
@@ -252,7 +267,9 @@ class TemplateCrawler(object):
                 continue
             abs_link = get_abs_url(url, raw_link)
 
-            if is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:
+            if self.is_ref_model:
+                img['src'] = abs_link
+            elif is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:
                 file_name = get_file_name_from_url(abs_link, "png")
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
@@ -300,13 +317,16 @@ class TemplateCrawler(object):
             if is_inline_resource(resource_url):  # 内嵌base64图片
                 continue
             abs_link = get_abs_url(url, resource_url)
-
-            if is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
+            if self.is_ref_model:
+                style['style'] = style['style'].replace(resource_url, abs_link)
+            elif is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
                 file_name = get_file_name_from_url(abs_link, 'png')
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
                 style['style'] = style['style'].replace(resource_url, replace_url)
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
+            else:
+                style['style'] = style['style'].replace(resource_url, abs_link)
 
     async def __process_in_html_css_resource(self, soup, url):
         style_css = soup.find_all("style")
@@ -323,7 +343,9 @@ class TemplateCrawler(object):
                     if is_inline_resource(u):  # 内嵌base64图片
                         continue
                     abs_link = get_abs_url(url, u)
-                    if is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
+                    if self.is_ref_model:
+                        css_content = css_content.replace(raw_u, f'url({abs_link})')
+                    elif is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
                         file_name = get_file_name_from_url(abs_link)
                         if is_img_ext(file_name):
                             file_save_path = f"{self.__get_img_full_path()}/{file_name}"
@@ -352,7 +374,10 @@ class TemplateCrawler(object):
             if raw_link is None:
                 continue
             abs_link = get_abs_url(url, raw_link)
-            if is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:  # 控制是否抓外链资源
+
+            if self.is_ref_model:
+                css['href'] = abs_link
+            elif is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:  # 控制是否抓外链资源
                 file_name = get_file_name_from_url(abs_link, 'css')
 
                 if is_img_ext(file_name):
@@ -525,15 +550,16 @@ class TemplateCrawler(object):
         return  None, None
 
     def __pre_process_page(self, soup, url):
-        delete_node_attr = {"link": ("rel", "dns-prefetch"),}
-        for k, v in delete_node_attr.items():
-            nodes = soup.find_all(k)
-            if nodes:
-                for n in nodes:
-                    attr_name, attr_val=v
-                    attr = n.get(attr_name)
-                    if attr and attr_val in attr:
-                        n.decompose()
+        delete_node_attr = [{"link":("rel", "alternate")}, {"link": ("rel", "dns-prefetch")}]
+        for rule in delete_node_attr:
+            for k, v in rule.items():
+                nodes = soup.find_all(k)
+                if nodes:
+                    for n in nodes:
+                        attr_name, attr_val=v
+                        attr = n.get(attr_name)
+                        if attr and attr_val in attr:
+                            n.decompose()
         return soup
 
     async def template_crawl(self):
@@ -768,11 +794,11 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/authentication/forget-password.html
     """
     url_list = [
-        "https://taobao.com",
+        "https://prium.github.io/falcon/index.html",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True, to_single_page=False, full_site=False)
+                             grab_out_site_link=True, to_single_page=False, full_site=True, ref_model=True)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.gather(

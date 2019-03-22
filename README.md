@@ -7,11 +7,9 @@
 - 盗链模式
     - html内link (css, 图片、js等改为绝对地址)、元素style内联的资源地址修改
 - 域名黑名单：不抓这些域名的东西
-- 预处理页面步骤，删掉一些没用的节点：统计，dns,...
 
 ## BUG
 - 百度按钮歪了
-- is_same_web_site_link() 子域名不应该是父域名想同
 ## 竞品
 https://gitee.com/mail_osc/templatespider
 
