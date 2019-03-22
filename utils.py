@@ -8,6 +8,7 @@ from config import SEND_MAIL
 from smtplib import SMTP_SSL
 import logging,re
 from slugify import slugify
+import validators
 
 """
 urlparse.urlparse("http://some.page.pl/nothing.py;someparam=some;otherparam=other?query1=val1&query2=val2#frag")
@@ -116,6 +117,17 @@ def is_same_web_site_link(url1, url2):
 
     return domain1==domain2
 
+
+def is_valid_url(url):
+    # regex = re.compile(
+    #     r'^(?:http|ftp)s?://'  # http:// or https://
+    #     r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+(?:[A-Z]{2,6}\.?|[A-Z0-9-]{2,}\.?)|'  # domain...
+    #     r'localhost|'  # localhost...
+    #     r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
+    #     r'(?::\d+)?'  # optional port
+    #     r'(?:/?|[/?]\S+)$', re.IGNORECASE)
+    # re.match(regex, url)
+    return validators.url(url)
 
 def format_url(url):
     i=url.rfind("#")

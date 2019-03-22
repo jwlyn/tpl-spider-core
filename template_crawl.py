@@ -86,6 +86,9 @@ class TemplateCrawler(object):
                 a.value{
                 
                 }
+                a.err{
+                    color: red;
+                }
                 </style>
                 <center><h1>TEMPLATE REPORT</h1></center><br>\n
                 
@@ -94,7 +97,11 @@ class TemplateCrawler(object):
             if len(self.error_grab_resource.keys()) > 0:
                 for url, path in self.error_grab_resource.items():
                     await f.writelines(
-                        f"{url} &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; => &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {path} <br>\n")
+                        f"""
+                        <a class='err' href='{url}' target="_blank"> {url} </a>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; => &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; {path} <br>\n
+                        """
+                    )
+
                 await f.writelines("""
                 <b>To fix this error: download the url content and put them in the followed directory.</b><br>\n
             """)
@@ -531,7 +538,7 @@ class TemplateCrawler(object):
     async def __async_get_request_text(self, url):
         max_retry = config.max_retry
         time_out = config.http_timeout
-        for i in range(1, max_retry + 1):
+        for i in range(1, max_retry+1):
             to = time_out * i
             try:
                 logger.info("async craw[%s] %s", i, url)
@@ -539,6 +546,8 @@ class TemplateCrawler(object):
                     async with session.get(url, timeout=to, headers=self.header) as resp:
                         if resp.status!=200:
                             continue
+                        elif resp.status==404:
+                            break
                         elif not resp.content_type.startswith("text"): # 如果是二进制的，防止错误
                             break
                         txt =  await resp.text()
@@ -580,32 +589,34 @@ class TemplateCrawler(object):
             tpl_file_name = self.__get_file_name(url, i)
             save_file_path = f"{self.__get_tpl_full_path()}/{tpl_file_name}"
 
-            if self.__is_dup(url, tpl_file_name):
-                continue
-            resp_text, encoding = await self.__async_get_request_text(url)
-            html = resp_text
-            if html is None:
-                self.logger.error("async get error >> %s ", url)
-                continue
-            if self.charset is None:
-                self.charset = encoding
-                if self.charset is None:
-                    self.charset = 'utf-8'
+            if not self.__is_dup(url, tpl_file_name):
+                resp_text, encoding = await self.__async_get_request_text(url)
+                html = resp_text
 
-            soup = BeautifulSoup(html, "lxml")
-            soup = self.__pre_process_page(soup, url)
-            soup = await self.__rend_template(soup, url)
+                if html is not None:
+                    if self.charset is None:
+                        self.charset = encoding
+                        if self.charset is None:
+                            self.charset = 'utf-8'
 
-            new_url = self.__get_same_site_link(soup, url)  # 获取全部同网站下的链接页面，当然会检查一下是否要全栈抓取
-            for u in new_url:  # 新产生的url进入队列，用于全站抓取时候
-                if is_same_web_site_link(u, url) and is_under_same_link_folder(u, url) and u not in html_dedup_list: # 同站，同目录，非重复
-                    self.html_link_queue.put(u)
-                    html_dedup_list.append(u)
+                    soup = BeautifulSoup(html, "lxml")
+                    soup = self.__pre_process_page(soup, url)
+                    soup = await self.__rend_template(soup, url)
 
-            tpl_html = str(soup.prettify())
-            self.downloaded_html_url.append((save_file_path, tpl_file_name, url))  # 存储这个3元组，最后替换html页面里的地址
-            await self.__async_save_text_file(str(tpl_html), save_file_path)
-            self.__set_dup_url(url, save_file_path)  # 用于去重
+                    new_url = self.__get_same_site_link(soup, url)  # 获取全部同网站下的链接页面，当然会检查一下是否要全栈抓取
+                    for u in new_url:  # 新产生的url进入队列，用于全站抓取时候
+                        if is_same_web_site_link(u, url) and is_under_same_link_folder(u, url) and u not in html_dedup_list: # 同站，同目录，非重复
+                            self.html_link_queue.put(u)
+                            html_dedup_list.append(u)
+
+                    tpl_html = str(soup.prettify())
+                    self.downloaded_html_url.append((save_file_path, tpl_file_name, url))  # 存储这个3元组，最后替换html页面里的地址
+                    await self.__async_save_text_file(str(tpl_html), save_file_path)
+                    self.__set_dup_url(url, save_file_path)  # 用于去重
+                else:
+                    self.logger.error("async get error >> %s ", url)
+                    self.__set_dup_url(url, tpl_file_name)
+                    self.__log_error_resource(url, tpl_file_name)
 
             i += 1
             try:
@@ -720,8 +731,6 @@ class TemplateCrawler(object):
                 if i < max_retry:
                     self.logger.info("async retry craw[%s] %s" % (i+1, url))
                     continue
-            except TypeError as te:
-                return is_succ
 
         return is_succ # 这个地方不能删除，如果返回False, 上层会记录错误的抓取并最终体现在report里
 
@@ -780,6 +789,7 @@ class TemplateCrawler(object):
                 if is_succ is False:
                     self.logger.error("async get %s error", url)
                     self.__log_error_resource(url, self.__get_relative_report_file_path(save_path))
+                    self.__set_dup_url(url, save_path)
                 else:
                     self.__set_dup_url(url, save_path)
 
@@ -796,10 +806,9 @@ if __name__ == "__main__":
     gb2312 : https://www.jb51.net/web/25623.html
     import css  https://templated.co/items/demos/intensify/index.html
     https://prium.github.io/falcon/
-    https://prium.github.io/falcon/authentication/forget-password.html
     """
     url_list = [
-        "https://prium.github.io/Boots4/nav-four-item-one-column.html",
+        "http://r137.mobanvip.com",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},

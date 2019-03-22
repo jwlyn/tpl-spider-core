@@ -1,5 +1,5 @@
 http_timeout = 15
-max_retry = 3
+max_retry = 2
 template_temp_dir = "temp/"
 template_archive_dir="archive/"
 
