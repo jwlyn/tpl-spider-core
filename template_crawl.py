@@ -539,6 +539,8 @@ class TemplateCrawler(object):
                     async with session.get(url, timeout=to, headers=self.header) as resp:
                         if resp.status!=200:
                             continue
+                        elif not resp.content_type.startswith("text"): # 如果是二进制的，防止错误
+                            break
                         txt =  await resp.text()
                         encoding = resp.charset
                 return txt, encoding
@@ -550,7 +552,7 @@ class TemplateCrawler(object):
         return  None, None
 
     def __pre_process_page(self, soup, url):
-        delete_node_attr = [{"link":("rel", "alternate")}, {"link": ("rel", "dns-prefetch")}]
+        delete_node_attr = [{"link":("rel", "alternate")}, {"link": ("rel", "dns-prefetch")}, {"link":("rel", "manifest")}]
         for rule in delete_node_attr:
             for k, v in rule.items():
                 nodes = soup.find_all(k)
@@ -582,6 +584,9 @@ class TemplateCrawler(object):
                 continue
             resp_text, encoding = await self.__async_get_request_text(url)
             html = resp_text
+            if html is None:
+                self.logger.error("async get error >> %s ", url)
+                continue
             if self.charset is None:
                 self.charset = encoding
                 if self.charset is None:
@@ -661,7 +666,8 @@ class TemplateCrawler(object):
                         abs_link = get_abs_url(url, raw_link) #新产生的url
                         abs_link = format_url(abs_link)
                         a['href'] = abs_link
-                        if abs_link not in new_url:
+
+                        if is_page_url(abs_link) and not is_img_ext(abs_link) and  abs_link not in new_url:
                             new_url.append(abs_link)
                     except Exception as e:
                         self.logger.info("%s: %s", a, e)
@@ -756,7 +762,6 @@ class TemplateCrawler(object):
             cmd = self.download_queue.get()
             if not cmd:  # 超时没拿到东西，让出cpu然后再来拿
                 self.logger.info("queue get nothing")
-                time.sleep(config.url_download_queue_timeout)
                 await asyncio.sleep(config.url_download_queue_timeout)
                 continue
 
@@ -794,11 +799,11 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/authentication/forget-password.html
     """
     url_list = [
-        "https://prium.github.io/falcon/index.html",
+        "https://prium.github.io/Boots4/nav-four-item-one-column.html",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True, to_single_page=False, full_site=True, ref_model=True)
+                             grab_out_site_link=True, to_single_page=False, full_site=True, ref_model=False)
 
     loop = asyncio.get_event_loop()
     loop.run_until_complete(asyncio.gather(

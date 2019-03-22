@@ -221,6 +221,7 @@ def get_file_name_from_url(url, ext='css'):
 
 if __name__=="__main__":
     urls_test = [
+    "http://markup.themewagon.com/mountain_v_2.5.3/assets/lib/menuzord/css/menuzord.css",
     "http://a.com?main.css?a=b;c=d;",
     "http://a.com/a/b/c/xx-dd;a=c;b=d",
     "http://res.weiunity.com/template/boke1/resource/fonts/icomoon.ttf?ngfxmq",
