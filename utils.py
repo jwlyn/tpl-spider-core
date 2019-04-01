@@ -1,3 +1,4 @@
+import base64
 from datetime import datetime
 from urllib.parse import urlparse, urljoin
 import uuid,os,time, random
@@ -9,6 +10,7 @@ from smtplib import SMTP_SSL
 import logging,re
 from slugify import slugify
 import validators
+import mimetypes
 
 """
 urlparse.urlparse("http://some.page.pl/nothing.py;someparam=some;otherparam=other?query1=val1&query2=val2#frag")
@@ -229,6 +231,39 @@ def get_file_name_from_url(url, ext='css'):
     if '.' not in base_file_name:
         base_file_name = f"{base_file_name}.{ext}"
     return base_file_name
+
+
+def __get_inline_data_url_types(ext):
+    if ext in ['svg']:
+        return f"{ext}+xml"
+    else:
+        return ext
+
+
+def base64_encode_resource(css_path,   file_name):
+    """
+    用base64编码文件
+    :param file_path:
+    :return:
+    """
+
+    f_name, file_extension = os.path.splitext(file_name)
+    if is_img_ext(file_extension):
+        ext = file_extension[1:]
+        ext = __get_inline_data_url_types(ext)
+        file_type = f"image/{ext}"
+        file_path = f"{css_path}/{file_name}"
+    else:
+        file_type = f"application/x-font-{file_extension[1:]}"
+        file_path = f"{css_path}/{file_name}"
+
+    if os.path.exists(file_path):
+        with open(file_path, 'rb') as f:
+            b64_str = base64.b64encode(f.read()).decode('ascii')
+    else:
+        b64_str = f'{file_name} DOWNLOAD_ERROR'
+
+    return b64_str, file_type
 
 
 if __name__=="__main__":

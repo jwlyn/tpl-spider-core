@@ -3,7 +3,7 @@ from logging.config import fileConfig
 import shutil
 from utils import get_date, get_domain, get_abs_url, format_url, \
     is_same_web_site_link, is_img_ext, is_under_same_link_folder, is_page_url, is_inline_resource, \
-    get_file_name_from_url
+    get_file_name_from_url, base64_encode_resource
 from datetime import datetime
 import time
 from bs4 import BeautifulSoup
@@ -210,19 +210,19 @@ class TemplateCrawler(object):
     def __get_file_name(self, url, i):
         return  f"index_{i}.html"
 
-    def __get_tpl_replace_url(self, url_list):
-        """
-        模版中的链接地址要替换掉,生成一份 url全路径->磁盘路径的映射替换表
-        :param url_list:
-        :return:
-        """
-        url_mp = {}
-        i = 0
-        for u in url_list:
-            url_mp[u] = self.__get_file_name(u, i)
-            i += 1
-
-        return url_mp
+    # def __get_tpl_replace_url(self, url_list):
+    #     """
+    #     模版中的链接地址要替换掉,生成一份 url全路径->磁盘路径的映射替换表
+    #     :param url_list:
+    #     :return:
+    #     """
+    #     url_mp = {}
+    #     i = 0
+    #     for u in url_list:
+    #         url_mp[u] = self.__get_file_name(u, i)
+    #         i += 1
+    #
+    #     return url_mp
 
     def __log_error_resource(self, url, path):
         self.error_grab_resource[url] = path
@@ -395,7 +395,7 @@ class TemplateCrawler(object):
                     file_save_path = f"{self.__get_css_full_path()}/{file_name}"
                     replace_url = f"{self.css_dir}/{file_name}"
                     if not self.__is_dup(abs_link, file_save_path):
-                        resp_text, _ = await self.__async_get_request_text(abs_link)
+                        resp_text, _ = await self.__async_get_request_text(abs_link, force_as_text=True)
                         if resp_text is not None:
                             text_content = resp_text
                             text_content = await  self.__replace_and_grab_css_url(abs_link, text_content)
@@ -535,7 +535,7 @@ class TemplateCrawler(object):
             elif self.task_finished:
                 break
 
-    async def __async_get_request_text(self, url):
+    async def __async_get_request_text(self, url, force_as_text=False):
         max_retry = config.max_retry
         time_out = config.http_timeout
         for i in range(1, max_retry+1):
@@ -548,7 +548,7 @@ class TemplateCrawler(object):
                             continue
                         elif resp.status==404:
                             break
-                        elif not resp.content_type.startswith("text"): # 如果是二进制的，防止错误
+                        elif not resp.content_type.startswith("text") and force_as_text is False: # 如果是二进制的，防止错误
                             break
                         txt =  await resp.text()
                         encoding = resp.charset
@@ -629,10 +629,88 @@ class TemplateCrawler(object):
         self.__wait_unitl_task_finished() # 这个时候异步请求也全部落到磁盘上了
         await self.__html_content_link_2_local() # 调整html模版（磁盘）上的link为本地的地址
         await self.__make_report()
+        await self.__make_single_page() # 调整为单张页面
+
         zip_full_path = self.__get_zip_full_path()
         self.__make_zip(zip_full_path)
         # await self.__clean_dl_files()
         return self.__get_zip_relative_path(zip_full_path)
+
+    async def __make_single_page(self):
+        """
+        把本地磁盘上的东西调整为单张页面，这种页面适合从email里发送出去
+        调整算法：
+        - css压缩进html
+        - 然后css图片、字体压缩进css文件,
+        - import 的css TODO
+        - js文件再压缩进html
+        - 图片（style内联以及<image标签）
+        :return:
+        """
+        if self.is_to_single_page is False:
+            return
+
+        def __find_css_link(tag):
+            return tag.name=='link' and tag.has_attr("rel") and  'stylesheet' in tag.get('rel')
+
+        for disk_path, file_name, url in self.downloaded_html_url:
+            html_file = disk_path
+            with open(html_file, 'r', encoding='utf-8') as f:
+                html_content = f.read()
+                soup = BeautifulSoup(html_content, 'lxml')
+
+            ## 压缩css进html
+            css_links = soup.find_all(__find_css_link)  #<link rel="stylesheet" href="_static/default.css" type="text/css" />
+            if css_links:
+                for css_el in css_links:
+                    css_el_f = f'{self.__get_tpl_full_path()}/{css_el.get("href")}'
+                    with open(css_el_f, 'r', encoding='utf-8') as f2:
+                        css_content = f2.read()
+                        files = re.findall("url\(.*?\)", css_content)
+                        for r in files:
+                            css_resource_relative = self.__get_style_url_link(r)
+                            if css_resource_relative.startswith("data"):
+                                continue
+                            b64_data, type = base64_encode_resource(self.__get_css_full_path(), css_resource_relative)
+                            data = f"url('data:{type};charset=utf-8;base64,{b64_data}')"
+                            css_content = css_content.replace(r, data)
+                        css_new_tag = soup.new_tag("style", type='text/css')
+                        css_new_tag.append(css_content)
+                        css_el.insert_after(css_new_tag)
+                        css_el.decompose()
+
+
+            ## 压缩js进html
+            def __find_js_ref(tag):
+                return tag.name=='script' and tag.has_attr("src")
+
+            js_els = soup.find_all(__find_js_ref)
+            if js_els:
+                for js_el in js_els:
+                    js_el_f = f'{self.__get_tpl_full_path()}/{js_el.get("src")}'
+                    with open(js_el_f, 'r', encoding='utf-8') as f3:
+                        js_content = f3.read()
+                        js_new_tag = soup.new_tag("script", type='text/javascript')
+                        js_new_tag.append(js_content)
+                        js_el.insert_after(js_new_tag)
+                        js_el.decompose()
+
+            ## 图片标签压缩进html
+            img_els = soup.find_all("img")
+            if img_els:
+                for img in img_els:
+                    img_el_f = img.get("src")
+                    b64_data, type = base64_encode_resource(self.__get_tpl_full_path(),
+                                                            img_el_f)
+                    data = f"data:{type};charset=utf-8;base64,{b64_data}"
+                    img['src'] = data
+
+            ## 内联 url()压缩进html
+            #TODO
+                        
+            single_page = f'{html_file}.single.html'
+            with open(single_page, 'w', encoding='utf-8') as f_single:
+                f_single.writelines(soup.prettify())
 
     async def __html_content_link_2_local(self):
         """
@@ -808,16 +886,12 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/
     """
     url_list = [
-        "http://r137.mobanvip.com",
+        "http://boke1.wscso.com/",
     ]
     n1 = datetime.now()
-    spider = TemplateCrawler(url_list, save_base_dir=config.template_temp_dir, header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True, to_single_page=False, full_site=True, ref_model=False)
+    spider = TemplateCrawler(url_list, save_base_dir="/home/cxu/spider-template/", header={'User-Agent': config.default_ua},
+                             grab_out_site_link=True, to_single_page=True, full_site=True, ref_model=False)
 
-    loop = asyncio.get_event_loop()
-    loop.run_until_complete(asyncio.gather(
-        spider.template_crawl()
-    ))
-    loop.close()
+    asyncio.run(spider.template_crawl())
     n2 = datetime.now()
     print(n2 - n1)
