@@ -674,7 +674,6 @@ class TemplateCrawler(object):
                         css_el.insert_after(css_new_tag)
                         css_el.decompose()
 
-
             ## 压缩js进html
             def __find_js_ref(tag):
                 return tag.name=='script' and tag.has_attr("src")
@@ -890,11 +889,11 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/
     """
     url_list = [
-        "http://boke1.wscso.com/",
+        "http://bridge8.qodeinteractive.com",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir="/home/cxu/spider-template/", header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True, to_single_page=True, full_site=True, ref_model=False)
+                             grab_out_site_link=False, to_single_page=False, full_site=True, ref_model=False)
 
     asyncio.run(spider.template_crawl())
     n2 = datetime.now()
