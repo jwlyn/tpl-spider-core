@@ -625,7 +625,7 @@ class TemplateCrawler(object):
         await self.__html_content_link_2_local() # 调整html模版（磁盘）上的link为本地的地址
         await self.__make_single_page()  # 调整为单张页面
         await self.__make_report()
-    
+
         zip_full_path = self.__get_zip_full_path()
         self.__make_zip(zip_full_path)
         # await self.__clean_dl_files()
@@ -664,7 +664,7 @@ class TemplateCrawler(object):
                         files = re.findall("url\(.*?\)", css_content)
                         for r in files:
                             css_resource_relative = self.__get_style_url_link(r)
-                            if css_resource_relative.startswith("data"):
+                            if is_inline_resource(css_resource_relative):
                                 continue
                             b64_data, type = base64_encode_resource(self.__get_css_full_path(), css_resource_relative)
                             data = f"url('data:{type};charset=utf-8;base64,{b64_data}')"
@@ -701,7 +701,15 @@ class TemplateCrawler(object):
                     img['src'] = data
 
             ## 内联 url()压缩进html
-            #TODO
+            inner_style_node = soup.find_all(style=re.compile("url(.*?)"))  # TODO url/URL 大小写
+            for style in inner_style_node:
+                resource_url = re.findall('url\(.*?\)', style.get("style"))[0]  # TODO 遍历而非取第一个，匹配到全部
+                resource_url = self.__get_style_url_link(resource_url)
+                if is_inline_resource(resource_url):  # 内嵌base64图片
+                    continue
+                b64_data, type = base64_encode_resource(self.__get_img_full_path(), resource_url)
+                data = f"url('data:{type};charset=utf-8;base64,{b64_data}')"
+                style['style'] = style['style'].replace(resource_url, data)
 
             single_page = f'{html_file}.single.html'
             with open(single_page, 'w', encoding='utf-8') as f_single:
