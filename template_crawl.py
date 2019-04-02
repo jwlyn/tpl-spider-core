@@ -51,6 +51,7 @@ class TemplateCrawler(object):
         if self.is_ref_model:
             self.is_grab_outer_link = False  # 盗链模式下，一定不抓外部的资源,内部资源也会被改写绝对路径
         self.is_to_single_page=to_single_page  # 是否把图片，css, js等压缩到一个页面里
+        self.single_page = []
         self.is_full_site = full_site          #是否是整站
         self.html_link_queue = Queue()  # html 页面的队列
         for u in url_list:
@@ -92,7 +93,7 @@ class TemplateCrawler(object):
                 </style>
                 <center><h1>TEMPLATE REPORT</h1></center><br>\n
                 
-                <h2 style='color: red;'>1. Error report</h2><br>\n
+                <h2 style='color: red;'>Error report</h2><br>\n
             """)
             if len(self.error_grab_resource.keys()) > 0:
                 for url, path in self.error_grab_resource.items():
@@ -107,10 +108,18 @@ class TemplateCrawler(object):
             """)
             else:
                 await f.writelines("every thing is ok!")
+            ## =========================================== Email页面
+            if self.is_to_single_page:
+                await f.writelines("""
+                                                <hr /><br>
+                                                <h2>single page template</h2><br>\n
+                                            """)
+                for u in self.single_page:
+                    await f.writelines(f"<a target='_blank' class='key' href='{u}'>{u}</a> <br>\n" )
             # #===========================================用户输入的原始页面+派生的html
             await f.writelines("""
             <hr /><br>
-            <h2>2. Template source url</h2><br>\n
+            <h2>Template source url</h2><br>\n
         """)
             for disk_file, file, url in self.downloaded_html_url:
                 await f.writelines(f"<a target='_blank' class='key' href='{url}'>{url}</a> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp; =>  <a class='value' target='_blank' href='./{file}'>{file}</a> <br>\n" )
@@ -118,7 +127,7 @@ class TemplateCrawler(object):
             await f.writelines(f"""
             <hr />
             
-            <h2>3. Spider report ({len(self.dl_urls.keys())} files)</h2><br>\n
+            <h2>Spider report ({len(self.dl_urls.keys())} files)</h2><br>\n
             """ )
 
             for url, path in self.dl_urls.items():
@@ -209,20 +218,6 @@ class TemplateCrawler(object):
 
     def __get_file_name(self, url, i):
         return  f"index_{i}.html"
-
-    # def __get_tpl_replace_url(self, url_list):
-    #     """
-    #     模版中的链接地址要替换掉,生成一份 url全路径->磁盘路径的映射替换表
-    #     :param url_list:
-    #     :return:
-    #     """
-    #     url_mp = {}
-    #     i = 0
-    #     for u in url_list:
-    #         url_mp[u] = self.__get_file_name(u, i)
-    #         i += 1
-    #
-    #     return url_mp
 
     def __log_error_resource(self, url, path):
         self.error_grab_resource[url] = path
@@ -628,9 +623,9 @@ class TemplateCrawler(object):
         self.__quit_cmd_enqueue()  # 没有新的url产生了
         self.__wait_unitl_task_finished() # 这个时候异步请求也全部落到磁盘上了
         await self.__html_content_link_2_local() # 调整html模版（磁盘）上的link为本地的地址
+        await self.__make_single_page()  # 调整为单张页面
         await self.__make_report()
-        await self.__make_single_page() # 调整为单张页面
-
+    
         zip_full_path = self.__get_zip_full_path()
         self.__make_zip(zip_full_path)
         # await self.__clean_dl_files()
@@ -707,10 +702,11 @@ class TemplateCrawler(object):
 
             ## 内联 url()压缩进html
             #TODO
-                        
+
             single_page = f'{html_file}.single.html'
             with open(single_page, 'w', encoding='utf-8') as f_single:
                 f_single.writelines(soup.prettify())
+                self.single_page.append(f'{file_name}.single.html')
 
     async def __html_content_link_2_local(self):
         """
