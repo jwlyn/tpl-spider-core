@@ -707,8 +707,8 @@ class TemplateCrawler(object):
                 resource_url = self.__get_style_url_link(resource_url)
                 if is_inline_resource(resource_url):  # 内嵌base64图片
                     continue
-                b64_data, type = base64_encode_resource(self.__get_img_full_path(), resource_url)
-                data = f"url('data:{type};charset=utf-8;base64,{b64_data}')"
+                b64_data, type = base64_encode_resource(self.__get_tpl_full_path(), resource_url)
+                data = f"data:{type};charset=utf-8;base64,{b64_data}"
                 style['style'] = style['style'].replace(resource_url, data)
 
             single_page = f'{html_file}.single.html'
