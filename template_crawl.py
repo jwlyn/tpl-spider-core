@@ -61,6 +61,8 @@ class TemplateCrawler(object):
         self.download_finished = False  # url消耗完毕不代表网络请求都返回了
         self.task_finished = False  # 全部网络都返回， eventloop结束
 
+        self.file_name_dup_checker = [] # 用于检查生成的文件名字是否有重复的，如果重复了就要重新生成了
+
         self.thread = threading.Thread(target=self.__download_thread)
         self.thread.start()
 
@@ -242,7 +244,7 @@ class TemplateCrawler(object):
                 """
                 如果是外链引入的js就不管了,除非打开了开关
                 """
-                file_name = get_file_name_from_url(abs_link, "js")
+                file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker, "js")
                 file_save_path = f"{self.__get_js_full_path()}/{file_name}"
                 replace_url = f"{self.js_dir}/{file_name}"
                 scripts['src'] = replace_url
@@ -272,7 +274,7 @@ class TemplateCrawler(object):
             if self.is_ref_model:
                 img['src'] = abs_link
             elif is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:
-                file_name = get_file_name_from_url(abs_link, "png")
+                file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker, "png")
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
                 img['src'] = replace_url
@@ -322,7 +324,7 @@ class TemplateCrawler(object):
             if self.is_ref_model:
                 style['style'] = style['style'].replace(resource_url, abs_link)
             elif is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
-                file_name = get_file_name_from_url(abs_link, 'png')
+                file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker, 'png')
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
                 style['style'] = style['style'].replace(resource_url, replace_url)
@@ -348,7 +350,7 @@ class TemplateCrawler(object):
                     if self.is_ref_model:
                         css_content = css_content.replace(raw_u, f'url({abs_link})')
                     elif is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:
-                        file_name = get_file_name_from_url(abs_link)
+                        file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker)
                         if is_img_ext(file_name):
                             file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                             replace_url = f"{self.img_dir}/{file_name}"
@@ -380,7 +382,7 @@ class TemplateCrawler(object):
             if self.is_ref_model:
                 css['href'] = abs_link
             elif is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:  # 控制是否抓外链资源
-                file_name = get_file_name_from_url(abs_link, 'css')
+                file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker, 'css')
 
                 if is_img_ext(file_name):
                     file_save_path = f"{self.__get_img_full_path()}/{file_name}"
@@ -429,7 +431,7 @@ class TemplateCrawler(object):
                 continue
 
             if self.is_grab_outer_link:  # 控制是否抓外链资源,只要抓外部资源，那么css里的全部资源都要无条件抓进来而不管是不是一个同站点的
-                file_name = get_file_name_from_url(abs_link, 'css')
+                file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker, 'css')
                 is_img = is_img_ext(file_name)
                 if is_img:
                     file_save_path = f"{self.__get_img_full_path()}/{file_name}"
@@ -456,7 +458,7 @@ class TemplateCrawler(object):
                 else:
                     abs_link = get_abs_url(url, u)
 
-                file_name = get_file_name_from_url(abs_link, 'css')
+                file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker, 'css')
                 file_save_path = f"{self.__get_css_full_path()}/{file_name}"
                 if not self.__is_dup(abs_link, file_save_path):
                     resp_text, _ = await self.__async_get_request_text(abs_link)
@@ -658,7 +660,10 @@ class TemplateCrawler(object):
             css_links = soup.find_all(__find_css_link)  #<link rel="stylesheet" href="_static/default.css" type="text/css" />
             if css_links:
                 for css_el in css_links:
-                    css_el_f = f'{self.__get_tpl_full_path()}/{css_el.get("href")}'
+                    href = css_el.get("href")
+                    if href and href.startswith("http"):
+                        continue
+                    css_el_f = f'{self.__get_tpl_full_path()}/{href}'
                     with open(css_el_f, 'r', encoding='utf-8') as f2:
                         css_content = f2.read()
                         files = re.findall("url\(.*?\)", css_content)
@@ -681,7 +686,10 @@ class TemplateCrawler(object):
             js_els = soup.find_all(__find_js_ref)
             if js_els:
                 for js_el in js_els:
-                    js_el_f = f'{self.__get_tpl_full_path()}/{js_el.get("src")}'
+                    src = js_el.get("src")
+                    if src and src.startswith("http"):
+                        continue
+                    js_el_f = f'{self.__get_tpl_full_path()}/{src}'
                     with open(js_el_f, 'r', encoding='utf-8') as f3:
                         js_content = f3.read()
                         js_new_tag = soup.new_tag("script", type='text/javascript')
@@ -694,6 +702,8 @@ class TemplateCrawler(object):
             if img_els:
                 for img in img_els:
                     img_el_f = img.get("src")
+                    if img_el_f and img_el_f.startswith("http"):
+                        continue
                     b64_data, type = base64_encode_resource(self.__get_tpl_full_path(),
                                                             img_el_f)
                     data = f"data:{type};charset=utf-8;base64,{b64_data}"
@@ -889,11 +899,11 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/
     """
     url_list = [
-        "http://bridge8.qodeinteractive.com",
+        "https://prium.github.io/Boots4/nav-six-item-two-column.html",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir="/home/cxu/spider-template/", header={'User-Agent': config.default_ua},
-                             grab_out_site_link=False, to_single_page=False, full_site=True, ref_model=False)
+                             grab_out_site_link=True, to_single_page=False, full_site=False, ref_model=False)
 
     asyncio.run(spider.template_crawl())
     n2 = datetime.now()

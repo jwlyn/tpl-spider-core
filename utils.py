@@ -213,7 +213,7 @@ def send_email(title, content, to_list):
         logger.error("Error: unable to send email")
 
 
-def get_file_name_from_url(url, ext='css'):
+def get_file_name_from_url(url, duper, ext='css'):
     temp = urlparse(url)
     path = temp.path
     q = temp.query
@@ -230,6 +230,12 @@ def get_file_name_from_url(url, ext='css'):
 
     if '.' not in base_file_name:
         base_file_name = f"{base_file_name}.{ext}"
+
+    while base_file_name in duper:
+        base_file_name = f'1_{base_file_name}'
+
+    duper.append(base_file_name)
+
     return base_file_name
 
 
@@ -279,4 +285,4 @@ if __name__=="__main__":
     "http://g.alicdn.com/??kissy/k/6.2.4/seed-min.js,kg/global-util/1.0.7/index-min.js,tb/tracker/4.3.12/index.js,kg/tb-nav/2.5.3/index-min.js,secdev/sufei_data/3.3.5/index.js",
     ]
     for u in urls_test:
-        print(get_file_name_from_url(u))
+        print(get_file_name_from_url(u, []))
