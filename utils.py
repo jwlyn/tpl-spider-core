@@ -2,6 +2,8 @@ import base64
 from datetime import datetime
 from urllib.parse import urlparse, urljoin
 import uuid,os,time, random
+
+import aiofiles
 import tldextract
 from email.mime.text import MIMEText
 from email.header import Header
@@ -246,7 +248,7 @@ def __get_inline_data_url_types(ext):
         return ext
 
 
-def base64_encode_resource(css_path,   file_name):
+async def base64_encode_resource(css_path,   file_name):
     """
     用base64编码文件
     :param file_path:
@@ -264,8 +266,9 @@ def base64_encode_resource(css_path,   file_name):
         file_path = f"{css_path}/{file_name}"
 
     if os.path.exists(file_path):
-        with open(file_path, 'rb') as f:
-            b64_str = base64.b64encode(f.read()).decode('ascii')
+        async with aiofiles.open(file_path, 'rb') as f:
+            content = await f.read()
+        b64_str = base64.b64encode(content).decode('ascii')
     else:
         b64_str = f'{file_name} DOWNLOAD_ERROR'
 

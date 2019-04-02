@@ -652,9 +652,9 @@ class TemplateCrawler(object):
 
         for disk_path, file_name, url in self.downloaded_html_url:
             html_file = disk_path
-            with open(html_file, 'r', encoding='utf-8') as f:
-                html_content = f.read()
-                soup = BeautifulSoup(html_content, 'lxml')
+            async with aiofiles.open(html_file, 'r', encoding='utf-8') as f:
+                html_content = await f.read()
+            soup = BeautifulSoup(html_content, 'lxml')
 
             ## 压缩css进html
             css_links = soup.find_all(__find_css_link)  #<link rel="stylesheet" href="_static/default.css" type="text/css" />
@@ -664,20 +664,20 @@ class TemplateCrawler(object):
                     if href and href.startswith("http"):
                         continue
                     css_el_f = f'{self.__get_tpl_full_path()}/{href}'
-                    with open(css_el_f, 'r', encoding='utf-8') as f2:
-                        css_content = f2.read()
-                        files = re.findall("url\(.*?\)", css_content)
-                        for r in files:
-                            css_resource_relative = self.__get_style_url_link(r)
-                            if is_inline_resource(css_resource_relative):
-                                continue
-                            b64_data, type = base64_encode_resource(self.__get_css_full_path(), css_resource_relative)
-                            data = f"url('data:{type};charset=utf-8;base64,{b64_data}')"
-                            css_content = css_content.replace(r, data)
-                        css_new_tag = soup.new_tag("style", type='text/css')
-                        css_new_tag.append(css_content)
-                        css_el.insert_after(css_new_tag)
-                        css_el.decompose()
+                    async with aiofiles.open(css_el_f, 'r', encoding='utf-8') as f2:
+                        css_content = await f2.read()
+                    files = re.findall("url\(.*?\)", css_content)
+                    for r in files:
+                        css_resource_relative = self.__get_style_url_link(r)
+                        if is_inline_resource(css_resource_relative):
+                            continue
+                        b64_data, type = await base64_encode_resource(self.__get_css_full_path(), css_resource_relative)
+                        data = f"url('data:{type};charset=utf-8;base64,{b64_data}')"
+                        css_content = css_content.replace(r, data)
+                    css_new_tag = soup.new_tag("style", type='text/css')
+                    css_new_tag.append(css_content)
+                    css_el.insert_after(css_new_tag)
+                    css_el.decompose()
 
             ## 压缩js进html
             def __find_js_ref(tag):
@@ -690,8 +690,8 @@ class TemplateCrawler(object):
                     if src and src.startswith("http"):
                         continue
                     js_el_f = f'{self.__get_tpl_full_path()}/{src}'
-                    with open(js_el_f, 'r', encoding='utf-8') as f3:
-                        js_content = f3.read()
+                    async with aiofiles.open(js_el_f, 'r', encoding='utf-8') as f3:
+                        js_content = await f3.read()
                         js_new_tag = soup.new_tag("script", type='text/javascript')
                         js_new_tag.append(js_content)
                         js_el.insert_after(js_new_tag)
@@ -704,7 +704,7 @@ class TemplateCrawler(object):
                     img_el_f = img.get("src")
                     if img_el_f and img_el_f.startswith("http"):
                         continue
-                    b64_data, type = base64_encode_resource(self.__get_tpl_full_path(),
+                    b64_data, type = await base64_encode_resource(self.__get_tpl_full_path(),
                                                             img_el_f)
                     data = f"data:{type};charset=utf-8;base64,{b64_data}"
                     img['src'] = data
@@ -716,13 +716,13 @@ class TemplateCrawler(object):
                 resource_url = self.__get_style_url_link(resource_url)
                 if is_inline_resource(resource_url):  # 内嵌base64图片
                     continue
-                b64_data, type = base64_encode_resource(self.__get_tpl_full_path(), resource_url)
+                b64_data, type = await base64_encode_resource(self.__get_tpl_full_path(), resource_url)
                 data = f"data:{type};charset=utf-8;base64,{b64_data}"
                 style['style'] = style['style'].replace(resource_url, data)
 
             single_page = f'{html_file}.single.html'
-            with open(single_page, 'w', encoding='utf-8') as f_single:
-                f_single.writelines(soup.prettify())
+            async with aiofiles.open(single_page, 'w', encoding='utf-8') as f_single:
+                await  f_single.writelines(soup.prettify())
                 self.single_page.append(f'{file_name}.single.html')
 
     async def __html_content_link_2_local(self):
