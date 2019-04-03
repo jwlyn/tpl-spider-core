@@ -24,7 +24,7 @@ class TemplateCrawler(object):
     FILE_TYPE_BIN = 'bin'
     FILE_TYPE_TEXT = 'text'
 
-    def __init__(self, url_list, save_base_dir, header, encoding=None, grab_out_site_link=False, to_single_page=False, full_site=False, ref_model=False):
+    def __init__(self, url_list, save_base_dir, header, encoding=None, grab_out_site_link=False, to_single_page=False, full_site=False, ref_model=False, framework=None):
         """
 
         :param url_list:
@@ -62,7 +62,7 @@ class TemplateCrawler(object):
         self.task_finished = False  # 全部网络都返回， eventloop结束
 
         self.file_name_dup_checker = {} # file_name => url 。用于检查生成的文件名字是否有重复的，如果重复了就要重新生成了
-
+        self.framework_support = framework
         self.thread = threading.Thread(target=self.__download_thread)
         self.thread.start()
 
@@ -330,6 +330,7 @@ class TemplateCrawler(object):
                 file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker, 'png')
                 file_save_path = f"{self.__get_img_full_path()}/{file_name}"
                 replace_url = f"{self.img_dir}/{file_name}"
+                replace_url = replace_url
                 style['style'] = style['style'].replace(resource_url, replace_url)
                 self.__url_enqueue(abs_link, file_save_path, self.FILE_TYPE_BIN)
             else:
@@ -557,7 +558,7 @@ class TemplateCrawler(object):
                 if i < max_retry:
                     continue
                 else:
-                    logger.exception(e)
+                    logger.error(e)
         return  None, None
 
     def __pre_process_page(self, soup, url):
@@ -629,6 +630,7 @@ class TemplateCrawler(object):
         self.__wait_unitl_task_finished() # 这个时候异步请求也全部落到磁盘上了
         await self.__html_content_link_2_local() # 调整html模版（磁盘）上的link为本地的地址
         await self.__make_single_page()  # 调整为单张页面
+        await self.__make_web_framework_template() #根据用户设置转化为支持的web框架模版
         await self.__make_report()
 
         zip_full_path = self.__get_zip_full_path()
@@ -726,6 +728,67 @@ class TemplateCrawler(object):
             single_page = f'{html_file}.single.html'
             async with aiofiles.open(single_page, 'w', encoding='utf-8') as f_single:
                 await  f_single.writelines(soup.prettify())
+                self.single_page.append(f'{file_name}.single.html')
+
+    async def __make_web_framework_template(self):
+        if self.framework_support is None:
+            return
+
+        def __find_css_link(tag):
+            return tag.name=='link' and tag.has_attr("rel") and  'stylesheet' in tag.get('rel')
+
+        for disk_path, file_name, url in self.downloaded_html_url:
+            html_file = disk_path
+            async with aiofiles.open(html_file, 'r', encoding='utf-8') as f:
+                html_content = await f.read()
+            soup = BeautifulSoup(html_content, 'lxml')
+
+            ## link
+            css_links = soup.find_all(__find_css_link)  #<link rel="stylesheet" href="_static/default.css" type="text/css" />
+            if css_links:
+                for css_el in css_links:
+                    href = css_el.get("href")
+                    if href and href.startswith("http"):
+                        continue
+                    css_el_href = f"{{% static '{href}' %}}"
+                    css_el['href'] = css_el_href
+
+            ## js
+            def __find_js_ref(tag):
+                return tag.name=='script' and tag.has_attr("src")
+
+            js_els = soup.find_all(__find_js_ref)
+            if js_els:
+                for js_el in js_els:
+                    src = js_el.get("src")
+                    if src and src.startswith("http"):
+                        continue
+                    js_el_src = f"""{{% static '{src}' %}}"""
+                    js_el['src'] = js_el_src
+
+            ## <image>
+            img_els = soup.find_all("img")
+            if img_els:
+                for img in img_els:
+                    img_el_f = img.get("src")
+                    if img_el_f and img_el_f.startswith("http"):
+                        continue
+                    img_src = f"""{{% static '{img_el_f}' %}}"""
+                    img['src'] = img_src
+
+            ## 内联 url()压缩进html
+            inner_style_node = soup.find_all(style=re.compile("url(.*?)"))  # TODO url/URL 大小写
+            for style in inner_style_node:
+                resource_url = re.findall('url\(.*?\)', style.get("style"))[0]  # TODO 遍历而非取第一个，匹配到全部
+                resource_url = self.__get_style_url_link(resource_url)
+                if is_inline_resource(resource_url):  # 内嵌base64图片
+                    continue
+                inline_url = f"""{{% static '{resource_url}' %}}"""
+                style['style'] = style['style'].replace(resource_url, inline_url)
+
+            single_page = f'{html_file}.{self.framework_support}.html'
+            async with aiofiles.open(single_page, 'w', encoding='utf-8') as f_single:
+                await  f_single.writelines(f"{{% load static %}}\n{soup.prettify()}")
                 self.single_page.append(f'{file_name}.single.html')
 
     async def __html_content_link_2_local(self):
@@ -902,11 +965,11 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/
     """
     url_list = [
-        "https://prium.github.io/Boots4/nav-four-item-two-column.html",
+        "https://technext.github.io/crafted/index.html",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir="/home/cxu/spider-template/", header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True, to_single_page=False, full_site=True, ref_model=False)
+                             grab_out_site_link=True, to_single_page=False, full_site=True, ref_model=False, framework="django")
 
     asyncio.run(spider.template_crawl())
     n2 = datetime.now()

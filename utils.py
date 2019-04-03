@@ -277,6 +277,15 @@ async def base64_encode_resource(css_path,   file_name):
     return b64_str, file_type
 
 
+def to_framework_url_format(path, framework_name):
+    # TODO 先支持django, 后面看咋整
+    if path.startswith(("http", "ftp")):
+        return path
+    else:
+        path = f"""{{% static '{path}' %}}"""
+        return path
+
+
 if __name__=="__main__":
     urls_test = [
     "http://markup.themewagon.com/mountain_v_2.5.3/assets/lib/menuzord/css/menuzord.css",
