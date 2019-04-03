@@ -233,10 +233,12 @@ def get_file_name_from_url(url, duper, ext='css'):
     if '.' not in base_file_name:
         base_file_name = f"{base_file_name}.{ext}"
 
-    while base_file_name in duper:
+    # 要处理那种名字一样但是url不一样的情况
+    # 如果名字一样而url不一样那么一定要找到一个不一样的名字。
+    while base_file_name in duper.keys() and duper[base_file_name]!=url:
         base_file_name = f'1_{base_file_name}'
 
-    duper.append(base_file_name)
+    duper[base_file_name]=url
 
     return base_file_name
 

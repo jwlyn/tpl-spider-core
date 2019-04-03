@@ -34,7 +34,7 @@ class TemplateCrawler(object):
         :param grab_out_site_link:
         :param to_single_page:
         :param full_site:
-        :param ref_model: 是否是盗链模式，如果是盗链模式那么grab_out_site_link强制为False
+        :param ref_model:
         """
         self.parent_save_dir = save_base_dir
         self.date_str = get_date()
@@ -51,17 +51,17 @@ class TemplateCrawler(object):
         if self.is_ref_model:
             self.is_grab_outer_link = False  # 盗链模式下，一定不抓外部的资源,内部资源也会被改写绝对路径
         self.is_to_single_page=to_single_page  # 是否把图片，css, js等压缩到一个页面里
-        self.single_page = []
+        self.single_page = []  #report生成时使用
         self.is_full_site = full_site          #是否是整站
         self.html_link_queue = Queue()  # html 页面的队列
         for u in url_list:
             self.html_link_queue.put(u)
-        self.downloaded_html_url = []  # 已经下载过的，保存(disk_path, file_name, url, )
+        self.downloaded_html_url = []  # 已经下载过的html，保存(disk_path, file_name, url, ), 最后用这个重新修正链接
         self.download_queue = Queue()  # 数据格式json  {'cmd':quit/download, "url":'http://baidu.com', "save_path":'/full/path/file.ext', 'type':'bin/text'}
         self.download_finished = False  # url消耗完毕不代表网络请求都返回了
         self.task_finished = False  # 全部网络都返回， eventloop结束
 
-        self.file_name_dup_checker = [] # 用于检查生成的文件名字是否有重复的，如果重复了就要重新生成了
+        self.file_name_dup_checker = {} # file_name => url 。用于检查生成的文件名字是否有重复的，如果重复了就要重新生成了
 
         self.thread = threading.Thread(target=self.__download_thread)
         self.thread.start()
@@ -149,6 +149,7 @@ class TemplateCrawler(object):
         :param save_path:
         :return:
         """
+        save_path = save_path.replace("//", '/')
         if url in self.dl_urls.keys():
             save_path2 = self.dl_urls.get(url)
             if save_path == save_path2:
@@ -159,6 +160,8 @@ class TemplateCrawler(object):
 
     def __set_dup_url(self, url, file_save_path):
         url = format_url(url)
+        if file_save_path:
+            file_save_path= file_save_path.replace("//", '/')
         self.dl_urls[url] = file_save_path
 
     def __get_tpl_full_path(self):
@@ -381,7 +384,7 @@ class TemplateCrawler(object):
 
             if self.is_ref_model:
                 css['href'] = abs_link
-            elif is_same_web_site_link(url, abs_link)  or self.is_grab_outer_link:  # 控制是否抓外链资源
+            elif is_same_web_site_link(url, abs_link) or self.is_grab_outer_link:  # 控制是否抓外链资源
                 file_name = get_file_name_from_url(abs_link, self.file_name_dup_checker, 'css')
 
                 if is_img_ext(file_name):
@@ -501,13 +504,13 @@ class TemplateCrawler(object):
         """
         file_save_path = file_save_path.replace("//", '/')
         if not self.__is_dup(url, file_save_path):
+            self.__set_dup_url(url, file_save_path)
             self.download_queue.put({
                 'cmd': self.CMD_DOWNLOAD,
                 'url': url,
                 'file_save_path': file_save_path,
                 'file_type': file_type,
             })
-            self.__set_dup_url(url, file_save_path)
 
     def __quit_cmd_enqueue(self):
         self.download_queue.put({
@@ -899,11 +902,11 @@ if __name__ == "__main__":
     https://prium.github.io/falcon/
     """
     url_list = [
-        "https://prium.github.io/Boots4/nav-six-item-two-column.html",
+        "https://prium.github.io/Boots4/nav-four-item-two-column.html",
     ]
     n1 = datetime.now()
     spider = TemplateCrawler(url_list, save_base_dir="/home/cxu/spider-template/", header={'User-Agent': config.default_ua},
-                             grab_out_site_link=True, to_single_page=False, full_site=False, ref_model=False)
+                             grab_out_site_link=True, to_single_page=False, full_site=True, ref_model=False)
 
     asyncio.run(spider.template_crawl())
     n2 = datetime.now()
