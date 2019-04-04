@@ -51,7 +51,7 @@ class SpiderTask(object):
             'id': r[0],
             'seeds': json.loads(r[1]),
             'ip': r[2],
-            'user_id_str': r[3],
+            'email': r[3],
             'user_agent': r[4],
             'status': r[5],
             'is_grab_out_link': r[6],
@@ -61,7 +61,8 @@ class SpiderTask(object):
             'gmt_modified': r[10],
             'gmt_created': r[11],
             'file_id': r[12],
-            'encoding':r[13]
+            'encoding':r[13],
+            'to_framework':r[14],
         }
 
         return task
@@ -76,7 +77,7 @@ class SpiderTask(object):
                 order by gmt_created DESC 
                 limit 1
             )
-            returning id, seeds, ip, user_id_str, user_agent, status, is_grab_out_link, is_to_single_page, is_full_site, is_ref_model, gmt_modified, gmt_created,file_id, encoding;
+            returning id, seeds, ip, email, user_agent, status, is_grab_out_link, is_to_single_page, is_full_site, is_ref_model, gmt_modified, gmt_created,file_id, encoding,to_framework;
             -- commit;
         """
         return self.__get_task_by_sql(sql)
@@ -91,7 +92,7 @@ class SpiderTask(object):
                 order by gmt_created DESC 
                 limit 1
             )
-            returning id, seeds, ip, user_id_str, user_agent, status, is_grab_out_link,is_to_single_page, is_full_site, is_ref_model, gmt_modified, gmt_created, file_id, encoding;
+            returning id, seeds, ip, email, user_agent, status, is_grab_out_link,is_to_single_page, is_full_site, is_ref_model, gmt_modified, gmt_created, file_id, encoding, to_framework;
             -- commit;
         """
         return self.__get_task_by_sql(sql)
@@ -145,6 +146,7 @@ class SpiderTask(object):
             is_full_page = task['is_full_page']
             is_ref_model = task['is_ref_model']
             encoding = task['encoding']
+            to_framework = task['to_framework']
             user_agent = self.__get_user_agent(task['user_agent'])
             spider = TemplateCrawler(seeds, save_base_dir=f"{base_craw_file_dir}/",
                                      header={'User-Agent': user_agent},
@@ -152,7 +154,8 @@ class SpiderTask(object):
                                      grab_out_site_link=is_grab_out_site_link,
                                      to_single_page=is_to_single_page,
                                      full_site=is_full_page,
-                                     ref_model=is_ref_model
+                                     ref_model=is_ref_model,
+                                     framework=to_framework
                                      )
             template_zip_file = await spider.template_crawl()
             try:
@@ -163,8 +166,8 @@ class SpiderTask(object):
 
             logger.info("begin update task finished")
             self.__update_task_status(task_id, template_zip_file)
-            send_template_mail("web template download link", "email-download.html", {"{{template_id}}":task['file_id']}, task['user_id_str'])
-            logger.info("send email to %s, link: %s", task['user_id_str'], task['file_id'])
+            send_template_mail("web template download link", "email-download.html", {"{{template_id}}":task['file_id']}, task['email'])
+            logger.info("send email to %s, link: %s", task['email'], task['file_id'])
 
 
 def setup_schedule_task(n_days_age, search_parent_dir_list):
