@@ -1,7 +1,10 @@
 http_timeout = 15
-max_retry = 3
+max_retry = 2
 template_temp_dir = "temp/"
 template_archive_dir="archive/"
+
+delete_file_n_days_age = 3 #删除3天前的历史下载临时文件和zip文件
+delete_file_cron = '00   22  *  *  0'
 
 default_ua = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/69.0.3497.100 Safari/537.36'
 
@@ -30,8 +33,9 @@ url_download_queue_timeout = 3  # 轮询一个url超时时间
 wait_url_sleep_time = 2  # 队列没有url时候等待多久
 wait_download_finish_sleep = 3  # 主线程等待任务完成的每次等待时间
 
-max_spider_process = 3 # 最多开几个进程
-# max_spider_thread_per_process = 1  # 一个python进程最大可以有多少个模版爬虫同时运行
+max_loop_cnt = 3  # 几个任务一起处理
+max_task_run_tm_seconds=5*60 #一个任务最多运行多久
+
 wait_db_task_interval_s=5
 
 db_name = "tpl_spider"
