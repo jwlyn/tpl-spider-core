@@ -635,7 +635,6 @@ class TemplateCrawler(object):
 
         zip_full_path = self.__get_zip_full_path()
         self.__make_zip(zip_full_path)
-        # await self.__clean_dl_files()
         return self.__get_zip_relative_path(zip_full_path)
 
     async def __make_single_page(self):

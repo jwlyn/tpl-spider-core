@@ -175,7 +175,8 @@ def setup_schedule_task(n_days_age, search_parent_dir_list):
     scheduler = BackgroundScheduler(timezone=time_zone)
     trigger = CronTrigger.from_crontab(config.delete_file_cron, timezone=time_zone)
     scheduler.add_job(clean_timeout_temp_dir_and_archive, trigger, kwargs={"n_day": n_days_age, "parent_dir_list":search_parent_dir_list})
-
+    # 启动时清理一下
+    clean_timeout_temp_dir_and_archive(n_days_age, search_parent_dir_list)
 
 async def main(base_craw_file_dir):
     await asyncio.gather(SpiderTask().loop(base_craw_file_dir),
