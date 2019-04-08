@@ -143,7 +143,7 @@ class SpiderTask(object):
             task_id = task['id']
             is_grab_out_site_link = task['is_grab_out_link'] #是否抓取外部站点资源
             is_to_single_page = task['is_to_single_page']
-            is_full_page = task['is_full_page']
+            is_full_site = task['is_full_site']
             is_ref_model = task['is_ref_model']
             encoding = task['encoding']
             to_framework = task['to_framework']
@@ -153,7 +153,7 @@ class SpiderTask(object):
                                      encoding=encoding,
                                      grab_out_site_link=is_grab_out_site_link,
                                      to_single_page=is_to_single_page,
-                                     full_site=is_full_page,
+                                     full_site=is_full_site,
                                      ref_model=is_ref_model,
                                      framework=to_framework
                                      )
