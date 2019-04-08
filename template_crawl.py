@@ -584,7 +584,7 @@ class TemplateCrawler(object):
         :return:
         """
         i = 0
-        url = self.html_link_queue.get(timeout=1)
+        url = self.html_link_queue.get(timeout=10)
         html_dedup_list = [url]
         while url is not None:
             tpl_file_name = self.__get_file_name(url, i)
