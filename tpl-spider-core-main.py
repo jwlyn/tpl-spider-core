@@ -30,6 +30,9 @@ class SpiderTask(object):
         except Exception as e:
             logger.exception(e)
             row = None
+        finally:
+            if conn:
+                await conn.close()
 
         if row:
             r = row
