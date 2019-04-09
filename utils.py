@@ -195,7 +195,7 @@ async def send_template_mail(title, template_file, args, to_list):
         content = await f.readlines()
     content = ''.join(content)
     for k, v in args.items():
-        content = content.replace(k, v)
+        content = content.replace(k, str(v))
 
     await send_email2(title, content, to_list)
 
