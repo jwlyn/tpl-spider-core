@@ -157,9 +157,10 @@ class SpiderTask(object):
                                      ref_model=is_ref_model,
                                      framework=to_framework
                                      )
-            template_zip_file = await spider.template_crawl()
+            #template_zip_file = await spider.template_crawl()
             try:
                 await asyncio.wait_for(spider.template_crawl(), timeout=config.max_task_run_tm_seconds)
+                template_zip_file = spider.zip_result_file
             except asyncio.TimeoutError:
                 #TODO #发给用户提示超时
                 self.__update_task_status(task_id, "", "E")

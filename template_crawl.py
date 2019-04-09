@@ -60,7 +60,7 @@ class TemplateCrawler(object):
         self.download_queue = Queue()  # 数据格式json  {'cmd':quit/download, "url":'http://baidu.com', "save_path":'/full/path/file.ext', 'type':'bin/text'}
         self.download_finished = False  # url消耗完毕不代表网络请求都返回了
         self.task_finished = False  # 全部网络都返回， eventloop结束
-
+        self.zip_result_file = None
         self.file_name_dup_checker = {} # file_name => url 。用于检查生成的文件名字是否有重复的，如果重复了就要重新生成了
         self.framework_support = framework
         self.thread = threading.Thread(target=self.__download_thread)
@@ -635,7 +635,9 @@ class TemplateCrawler(object):
 
         zip_full_path = self.__get_zip_full_path()
         self.__make_zip(zip_full_path)
-        return self.__get_zip_relative_path(zip_full_path)
+        template_zip_file =  self.__get_zip_relative_path(zip_full_path)
+        self.zip_result_file = template_zip_file
+        return template_zip_file
 
     async def __make_single_page(self):
         """
