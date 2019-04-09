@@ -133,7 +133,7 @@ class SpiderTask(object):
         """
         return await self.__get_task_by_sql(sql)
 
-    def __update_task_status(self, task_id, zip_path, status='C'):
+    async def __update_task_status(self, task_id, zip_path, status='C'):
         conn = await asyncpg.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
                                      host=dbconfig.db_url, )
 
