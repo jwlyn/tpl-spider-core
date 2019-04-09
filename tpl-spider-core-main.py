@@ -2,8 +2,6 @@ import asyncio
 import sys
 
 import asyncpg
-from psycopg2.extensions import TransactionRollbackError
-from psycopg2 import DatabaseError,ProgrammingError,OperationalError
 from config import logger
 import threading
 import config
@@ -11,7 +9,6 @@ import config as dbconfig
 import json
 from schedule_task import clean_timeout_temp_dir_and_archive
 from template_crawl import TemplateCrawler
-import psycopg2
 import random
 from apscheduler.schedulers.background import BackgroundScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -29,7 +26,7 @@ class SpiderTask(object):
             async with conn.transaction(isolation='repeatable_read'):
                 row = await conn.fetchrow(sql)
         except:
-            pass
+            raw = None
 
         if row:
             r = row
@@ -54,54 +51,6 @@ class SpiderTask(object):
             task = None
 
         return task
-    # def __get_task_by_sql(self, sql):
-    #     db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
-    #                                 host=dbconfig.db_url, port=dbconfig.db_port)
-    #     db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ)
-    #     cursor = db_trans.cursor()
-    #
-    #     try:
-    #         cursor.execute(sql)
-    #         if cursor.rowcount>0:
-    #             row = cursor.fetchone()
-    #             db_trans.commit()
-    #         else:
-    #             return None
-    #     except TransactionRollbackError as multip_update_exp:
-    #         logger.info(multip_update_exp)
-    #         db_trans.rollback()
-    #         return None
-    #     except (DatabaseError, ProgrammingError, OperationalError) as dbe:
-    #         logger.info(dbe)
-    #         db_trans.rollback()
-    #         return None
-    #     finally:
-    #         db_trans.close()
-    #
-    #     if row is None:
-    #         return None
-    #
-    #     r = row
-    #     cursor.close()
-    #     task = {
-    #         'id': r[0],
-    #         'seeds': json.loads(r[1]),
-    #         'ip': r[2],
-    #         'email': r[3],
-    #         'user_agent': r[4],
-    #         'status': r[5],
-    #         'is_grab_out_link': r[6],
-    #         'is_to_single_page': r[7],
-    #         'is_full_site':r[8],
-    #         'is_ref_model':r[9],
-    #         'gmt_modified': r[10],
-    #         'gmt_created': r[11],
-    #         'file_id': r[12],
-    #         'encoding':r[13],
-    #         'to_framework':r[14],
-    #     }
-    #
-    #     return task
 
     async def __get_timeout_task(self):
         sql = f"""
@@ -148,24 +97,6 @@ class SpiderTask(object):
         finally:
             if conn:
                 conn.close()
-
-    # def __update_task_status(self, task_id, zip_path, status='C'):
-    #     db = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
-    #                           host=dbconfig.db_url, port=dbconfig.db_port)
-    #     try:
-    #         sql = f"""
-    #             update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}';
-    #         """
-    #         cursor = db.cursor()
-    #         logger.info("begin execute sql %s", sql)
-    #         cursor.execute(sql)
-    #         cursor.close()
-    #         db.commit()
-    #     except Exception as e:
-    #         logger.exception(e)
-    #     finally:
-    #         if db:
-    #             db.close()
 
     def __get_user_agent(self, key):
         ua_list = config.ua_list.get(key)
