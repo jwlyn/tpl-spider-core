@@ -190,10 +190,10 @@ def is_inline_resource(resource_content):
 
 
 async def send_template_mail(title, template_file, args, to_list):
-    content = ""
+    content = []
     async with aiofiles.open(template_file, "r", encoding='utf-8') as f:
-        content = f.readlines()
-        content = ''.join(content)
+        content = await f.readlines()
+    content = ''.join(content)
     for k, v in args.items():
         content = content.replace(k, v)
 
