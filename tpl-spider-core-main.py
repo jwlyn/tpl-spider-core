@@ -25,6 +25,8 @@ class SpiderTask(object):
         try:
             async with conn.transaction(isolation='repeatable_read'):
                 row = await conn.fetchrow(sql)
+        except asyncpg.SerializationError as se:
+            row = None
         except Exception as e:
             logger.exception(e)
             row = None
