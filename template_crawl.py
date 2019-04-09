@@ -735,7 +735,7 @@ class TemplateCrawler(object):
                 style['style'] = style['style'].replace(resource_url, data)
 
             single_page = f'{html_file}.single.html'
-            
+
             async with aiofiles.open(single_page, 'w', encoding='utf-8') as f_single:
                 await  f_single.writelines(soup.prettify())
                 self.single_page.append(f'{file_name}.single.html')

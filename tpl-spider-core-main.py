@@ -167,7 +167,7 @@ class SpiderTask(object):
 
             logger.info("begin update task finished")
             self.__update_task_status(task_id, template_zip_file)
-            send_template_mail("web template download link", "email-download.html", {"{{template_id}}":task['file_id']}, task['email'])
+            await send_template_mail("your template is ready", "email-download.html", {"{{template_id}}":task['file_id']}, task['email'])
             logger.info("send email to %s, link: %s", task['email'], task['file_id'])
 
 
@@ -178,6 +178,7 @@ def setup_schedule_task(n_days_age, search_parent_dir_list):
     scheduler.add_job(clean_timeout_temp_dir_and_archive, trigger, kwargs={"n_day": n_days_age, "parent_dir_list":search_parent_dir_list})
     # 启动时清理一下
     clean_timeout_temp_dir_and_archive(n_days_age, search_parent_dir_list)
+
 
 async def main(base_craw_file_dir):
     await asyncio.gather(SpiderTask().loop(base_craw_file_dir),

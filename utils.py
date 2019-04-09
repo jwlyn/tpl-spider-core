@@ -4,6 +4,7 @@ from urllib.parse import urlparse, urljoin
 import uuid,os,time, random
 
 import aiofiles
+import aiosmtplib
 import tldextract
 from email.mime.text import MIMEText
 from email.header import Header
@@ -188,18 +189,18 @@ def is_inline_resource(resource_content):
     return resource_content and resource_content.lower().startswith(("data:", ))
 
 
-def send_template_mail(title, template_file, args, to_list):
+async def send_template_mail(title, template_file, args, to_list):
     content = ""
-    with open(template_file) as f:
+    async with aiofiles.open(template_file, "r", encoding='utf-8') as f:
         content = f.readlines()
         content = ''.join(content)
     for k, v in args.items():
         content = content.replace(k, v)
 
-    send_email(title, content, to_list)
+    await send_email2(title, content, to_list)
 
 
-def send_email(title, content, to_list):
+async def send_email(title, content, to_list):
     # 三个参数：第一个为文本内容，第二个 plain 设置文本格式，第三个 utf-8 设置编码
     message = MIMEText(content, 'html', 'utf-8')
     message['From'] = Header(f"{SEND_MAIL['sender']}", 'utf-8')
@@ -213,6 +214,23 @@ def send_email(title, content, to_list):
         logger.info("Successfully sent email")
     except Exception as e:
         logger.error("Error: unable to send email")
+
+
+async def send_email2(title, content, to_list):
+    # 三个参数：第一个为文本内容，第二个 plain 设置文本格式，第三个 utf-8 设置编码
+    message = MIMEText(content, 'html', 'utf-8')
+    message['From'] = Header(f"template-spider.com <{SEND_MAIL['sender']}>", 'utf-8')
+    message['To'] = Header(','.join(to_list), 'utf-8')
+    message['Subject'] = Header(title, 'utf-8')
+    try:
+        smtpObj = aiosmtplib.SMTP(hostname=SEND_MAIL['smtp_host'], port=SEND_MAIL['smtp_port'], use_tls=True)
+        await smtpObj.connect()
+        await smtpObj.login(SEND_MAIL['smtp_user'], SEND_MAIL['smtp_psw'])
+        await smtpObj.sendmail(SEND_MAIL['sender'], to_list, message.as_string())
+        logger.info("Successfully sent email")
+    except Exception as e:
+        logger.error("Error: unable to send email")
+        logger.exception(e)
 
 
 def get_file_name_from_url(url, duper, ext='css'):
