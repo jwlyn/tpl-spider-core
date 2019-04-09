@@ -99,7 +99,7 @@ class SpiderTask(object):
             logger.exception(e)
         finally:
             if conn:
-                conn.close()
+                await conn.close()
 
     def __get_user_agent(self, key):
         ua_list = config.ua_list.get(key)
