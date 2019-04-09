@@ -670,20 +670,25 @@ class TemplateCrawler(object):
                     if href and href.startswith("http"):
                         continue
                     css_el_f = f'{self.__get_tpl_full_path()}/{href}'
-                    async with aiofiles.open(css_el_f, 'r', encoding='utf-8') as f2:
-                        css_content = await f2.read()
-                    files = re.findall("url\(.*?\)", css_content)
-                    for r in files:
-                        css_resource_relative = self.__get_style_url_link(r)
-                        if is_inline_resource(css_resource_relative):
-                            continue
-                        b64_data, type = await base64_encode_resource(self.__get_css_full_path(), css_resource_relative)
-                        data = f"url('data:{type};charset=utf-8;base64,{b64_data}')"
-                        css_content = css_content.replace(r, data)
-                    css_new_tag = soup.new_tag("style", type='text/css')
-                    css_new_tag.append(css_content)
-                    css_el.insert_after(css_new_tag)
-                    css_el.decompose()
+                    try:
+                        async with aiofiles.open(css_el_f, 'r', encoding='utf-8') as f2:
+                            css_content = await f2.read()
+
+                        files = re.findall("url\(.*?\)", css_content)
+                        for r in files:
+                            css_resource_relative = self.__get_style_url_link(r)
+                            if is_inline_resource(css_resource_relative):
+                                continue
+                            b64_data, type = await base64_encode_resource(self.__get_css_full_path(), css_resource_relative)
+                            data = f"url('data:{type};charset=utf-8;base64,{b64_data}')"
+                            css_content = css_content.replace(r, data)
+
+                        css_new_tag = soup.new_tag("style", type='text/css')
+                        css_new_tag.append(css_content)
+                        css_el.insert_after(css_new_tag)
+                        css_el.decompose()
+                    except:
+                        continue
 
             ## 压缩js进html
             def __find_js_ref(tag):
@@ -696,12 +701,15 @@ class TemplateCrawler(object):
                     if src and src.startswith("http"):
                         continue
                     js_el_f = f'{self.__get_tpl_full_path()}/{src}'
-                    async with aiofiles.open(js_el_f, 'r', encoding='utf-8') as f3:
-                        js_content = await f3.read()
-                        js_new_tag = soup.new_tag("script", type='text/javascript')
-                        js_new_tag.append(js_content)
-                        js_el.insert_after(js_new_tag)
-                        js_el.decompose()
+                    try:
+                        async with aiofiles.open(js_el_f, 'r', encoding='utf-8') as f3:
+                            js_content = await f3.read()
+                            js_new_tag = soup.new_tag("script", type='text/javascript')
+                            js_new_tag.append(js_content)
+                            js_el.insert_after(js_new_tag)
+                            js_el.decompose()
+                    except:
+                        pass
 
             ## 图片标签压缩进html
             img_els = soup.find_all("img")
@@ -727,6 +735,7 @@ class TemplateCrawler(object):
                 style['style'] = style['style'].replace(resource_url, data)
 
             single_page = f'{html_file}.single.html'
+            
             async with aiofiles.open(single_page, 'w', encoding='utf-8') as f_single:
                 await  f_single.writelines(soup.prettify())
                 self.single_page.append(f'{file_name}.single.html')
