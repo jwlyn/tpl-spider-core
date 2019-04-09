@@ -134,6 +134,7 @@ def is_valid_url(url):
     # re.match(regex, url)
     return validators.url(url)
 
+
 def format_url(url):
     i=url.rfind("#")
     if i!= -1:
@@ -204,7 +205,7 @@ async def send_email2(title, content, to_list):
     # 三个参数：第一个为文本内容，第二个 plain 设置文本格式，第三个 utf-8 设置编码
     message = MIMEText(content, 'html', 'utf-8')
     message['From'] = Header(f"template-spider.com <{SEND_MAIL['sender']}>", 'utf-8')
-    message['To'] = Header("Dear", 'utf-8')
+    message['To'] = Header("亲爱的用户", 'utf-8')
     message['Subject'] = Header(title, 'utf-8')
     try:
         smtpObj = aiosmtplib.SMTP(hostname=SEND_MAIL['smtp_host'], port=SEND_MAIL['smtp_port'], use_tls=True)
