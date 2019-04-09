@@ -1,5 +1,7 @@
 import asyncio
 import sys
+
+import asyncpg
 from psycopg2.extensions import TransactionRollbackError
 from psycopg2 import DatabaseError,ProgrammingError,OperationalError
 from config import logger
@@ -18,56 +20,90 @@ from utils import send_template_mail
 
 
 class SpiderTask(object):
-    def __get_task_by_sql(self, sql):
-        db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
-                                    host=dbconfig.db_url, port=dbconfig.db_port)
-        db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ)
-        cursor = db_trans.cursor()
+
+    async def __get_task_by_sql(self, sql):
+        conn = await asyncpg.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
+                                     host=dbconfig.db_url, )
 
         try:
-            cursor.execute(sql)
-            if cursor.rowcount>0:
-                row = cursor.fetchone()
-                db_trans.commit()
-            else:
-                return None
-        except TransactionRollbackError as multip_update_exp:
-            logger.info(multip_update_exp)
-            db_trans.rollback()
-            return None
-        except (DatabaseError, ProgrammingError, OperationalError) as dbe:
-            logger.info(dbe)
-            db_trans.rollback()
-            return None
-        finally:
-            db_trans.close()
+            async with conn.transaction(isolation='repeatable_read'):
+                row = await conn.fetchrow(sql)
+        except:
+            pass
 
-        if row is None:
-            return None
-
-        r = row
-        cursor.close()
-        task = {
-            'id': r[0],
-            'seeds': json.loads(r[1]),
-            'ip': r[2],
-            'email': r[3],
-            'user_agent': r[4],
-            'status': r[5],
-            'is_grab_out_link': r[6],
-            'is_to_single_page': r[7],
-            'is_full_site':r[8],
-            'is_ref_model':r[9],
-            'gmt_modified': r[10],
-            'gmt_created': r[11],
-            'file_id': r[12],
-            'encoding':r[13],
-            'to_framework':r[14],
-        }
+        if row:
+            r = row
+            task = {
+                'id': r[0],
+                'seeds': json.loads(r[1]),
+                'ip': r[2],
+                'email': r[3],
+                'user_agent': r[4],
+                'status': r[5],
+                'is_grab_out_link': r[6],
+                'is_to_single_page': r[7],
+                'is_full_site': r[8],
+                'is_ref_model': r[9],
+                'gmt_modified': r[10],
+                'gmt_created': r[11],
+                'file_id': r[12],
+                'encoding': r[13],
+                'to_framework': r[14],
+            }
+        else:
+            task = None
 
         return task
+    # def __get_task_by_sql(self, sql):
+    #     db_trans = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
+    #                                 host=dbconfig.db_url, port=dbconfig.db_port)
+    #     db_trans.set_isolation_level(psycopg2.extensions.ISOLATION_LEVEL_REPEATABLE_READ)
+    #     cursor = db_trans.cursor()
+    #
+    #     try:
+    #         cursor.execute(sql)
+    #         if cursor.rowcount>0:
+    #             row = cursor.fetchone()
+    #             db_trans.commit()
+    #         else:
+    #             return None
+    #     except TransactionRollbackError as multip_update_exp:
+    #         logger.info(multip_update_exp)
+    #         db_trans.rollback()
+    #         return None
+    #     except (DatabaseError, ProgrammingError, OperationalError) as dbe:
+    #         logger.info(dbe)
+    #         db_trans.rollback()
+    #         return None
+    #     finally:
+    #         db_trans.close()
+    #
+    #     if row is None:
+    #         return None
+    #
+    #     r = row
+    #     cursor.close()
+    #     task = {
+    #         'id': r[0],
+    #         'seeds': json.loads(r[1]),
+    #         'ip': r[2],
+    #         'email': r[3],
+    #         'user_agent': r[4],
+    #         'status': r[5],
+    #         'is_grab_out_link': r[6],
+    #         'is_to_single_page': r[7],
+    #         'is_full_site':r[8],
+    #         'is_ref_model':r[9],
+    #         'gmt_modified': r[10],
+    #         'gmt_created': r[11],
+    #         'file_id': r[12],
+    #         'encoding':r[13],
+    #         'to_framework':r[14],
+    #     }
+    #
+    #     return task
 
-    def __get_timeout_task(self):
+    async def __get_timeout_task(self):
         sql = f"""
             -- start transaction isolation level repeatable read;
             update spider_task set gmt_modified = NOW() where id in (
@@ -80,9 +116,9 @@ class SpiderTask(object):
             returning id, seeds, ip, email, user_agent, status, is_grab_out_link, is_to_single_page, is_full_site, is_ref_model, gmt_modified, gmt_created,file_id, encoding,to_framework;
             -- commit;
         """
-        return self.__get_task_by_sql(sql)
+        return await self.__get_task_by_sql(sql)
 
-    def __get_a_task(self):
+    async def __get_a_task(self):
         sql = """
             -- start transaction isolation level repeatable read;
             update spider_task set status = 'P', gmt_modified=NOW() where id in (
@@ -95,25 +131,41 @@ class SpiderTask(object):
             returning id, seeds, ip, email, user_agent, status, is_grab_out_link,is_to_single_page, is_full_site, is_ref_model, gmt_modified, gmt_created, file_id, encoding, to_framework;
             -- commit;
         """
-        return self.__get_task_by_sql(sql)
+        return await self.__get_task_by_sql(sql)
 
     def __update_task_status(self, task_id, zip_path, status='C'):
-        db = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
-                              host=dbconfig.db_url, port=dbconfig.db_port)
+        conn = await asyncpg.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
+                                     host=dbconfig.db_url, )
+
         try:
             sql = f"""
                 update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}';
             """
-            cursor = db.cursor()
-            logger.info("begin execute sql %s", sql)
-            cursor.execute(sql)
-            cursor.close()
-            db.commit()
+            await conn.execute(sql)
+            logger.info("execute sql %s", sql)
         except Exception as e:
             logger.exception(e)
         finally:
-            if db:
-                db.close()
+            if conn:
+                conn.close()
+
+    # def __update_task_status(self, task_id, zip_path, status='C'):
+    #     db = psycopg2.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
+    #                           host=dbconfig.db_url, port=dbconfig.db_port)
+    #     try:
+    #         sql = f"""
+    #             update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}';
+    #         """
+    #         cursor = db.cursor()
+    #         logger.info("begin execute sql %s", sql)
+    #         cursor.execute(sql)
+    #         cursor.close()
+    #         db.commit()
+    #     except Exception as e:
+    #         logger.exception(e)
+    #     finally:
+    #         if db:
+    #             db.close()
 
     def __get_user_agent(self, key):
         ua_list = config.ua_list.get(key)
@@ -126,12 +178,12 @@ class SpiderTask(object):
 
     async def loop(self, base_craw_file_dir):
         while True:
-            task = self.__get_timeout_task()  # 优先处理超时的任务
+            task = await self.__get_timeout_task()  # 优先处理超时的任务
 
             if task is not None:
                 logger.info("获得一个超时任务 %s", task['id'])
             else:
-                task = self.__get_a_task()
+                task = await self.__get_a_task()
                 if not task:
                     logger.info("no task, wait")
                     await asyncio.sleep(config.wait_db_task_interval_s)
@@ -157,16 +209,16 @@ class SpiderTask(object):
                                      ref_model=is_ref_model,
                                      framework=to_framework
                                      )
-            #template_zip_file = await spider.template_crawl()
             try:
                 await asyncio.wait_for(spider.template_crawl(), timeout=config.max_task_run_tm_seconds)
                 template_zip_file = spider.zip_result_file
             except asyncio.TimeoutError:
-                #TODO #发给用户提示超时
-                self.__update_task_status(task_id, "", "E")
+                # TODO #发给用户提示超时
+                await self.__update_task_status(task_id, "", "E")
+                continue
 
             logger.info("begin update task finished")
-            self.__update_task_status(task_id, template_zip_file)
+            await self.__update_task_status(task_id, template_zip_file)
             await send_template_mail("your template is ready", "email-download.html", {"{{template_id}}":task['file_id']}, task['email'])
             logger.info("send email to %s, link: %s", task['email'], task['file_id'])
 
