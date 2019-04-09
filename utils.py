@@ -1,7 +1,7 @@
 import base64
 from datetime import datetime
 from urllib.parse import urlparse, urljoin
-import uuid,os,time, random
+import uuid, os, time, random
 
 import aiofiles
 import aiosmtplib
@@ -9,11 +9,9 @@ import tldextract
 from email.mime.text import MIMEText
 from email.header import Header
 from config import SEND_MAIL
-from smtplib import SMTP_SSL
-import logging,re
+import logging, re
 from slugify import slugify
 import validators
-import mimetypes
 
 """
 urlparse.urlparse("http://some.page.pl/nothing.py;someparam=some;otherparam=other?query1=val1&query2=val2#frag")
@@ -44,7 +42,7 @@ def get_base_url(url):
     :return:
     """
     ret = urlparse(url)
-    u = "%s://%s"%(ret.schema, ret.netloc)
+    u = "%s://%s" % (ret.schema, ret.netloc)
     return format_url(u)
 
 
@@ -56,7 +54,7 @@ def format_url(url):
     """
     ret = urlparse(url)
     fragments = ret.fragment
-    url = url[0:len(url)-len(fragments)]
+    url = url[0:len(url) - len(fragments)]
     if url.endswith('/') or url.endswith("#"):
         url = url[:-1]
 
@@ -72,7 +70,6 @@ def get_abs_url(base_url, raw_link):
     """
     u = urljoin(base_url, raw_link.strip())
     return format_url(u)
-
 
 
 def __get_uniq_timestr():
@@ -93,9 +90,9 @@ def get_url_file_name(url, file_ext='css'):
     :return:
     """
     i = url.rfind("?")
-    if i>0:
+    if i > 0:
         start_i = url[0:i].rfind("/")
-        file_name = url[start_i+1:i]
+        file_name = url[start_i + 1:i]
         # return file_name
         if "." not in file_name:
             file_name = f'{file_name}-{__get_uniq_timestr()}'
@@ -103,13 +100,13 @@ def get_url_file_name(url, file_ext='css'):
         return file_name
 
     i = url.rfind("=")
-    if i>0:
+    if i > 0:
         file_name = url[i + 1:]
     else:
         i = url.rfind("/")
         file_name = url[i + 1:]
 
-    if file_name.find(".")<0:
+    if file_name.find(".") < 0:
         file_name = f'{file_name}.{file_ext}'
     return file_name
 
@@ -120,7 +117,7 @@ def is_same_web_site_link(url1, url2):
     domain1 = f'{info1[0]}.{info1[1]}.{info1[2]}'
     domain2 = f'{info2[0]}.{info2[1]}.{info2[2]}'
 
-    return domain1==domain2
+    return domain1 == domain2
 
 
 def is_valid_url(url):
@@ -136,8 +133,8 @@ def is_valid_url(url):
 
 
 def format_url(url):
-    i=url.rfind("#")
-    if i!= -1:
+    i = url.rfind("#")
+    if i != -1:
         url = url[:i]
 
     return url
@@ -161,10 +158,10 @@ def __get_file_ext(file_name):
 
 
 def is_img_ext(file_name):
-    return file_name.lower().endswith(('gif','jpg','jpeg','png','swf','psd','bmp','tiff',\
-                                       'jpc','jp2','jpf','jb2','swc','aiff','wbmp','xbm',\
-                                       'tif','jfif','ras','cmx','ico','cod','pnm',\
-                                       'pbm','pgm','xwd','fh','wbmp','svg','aiff','webp'))
+    return file_name.lower().endswith(('gif', 'jpg', 'jpeg', 'png', 'swf', 'psd', 'bmp', 'tiff', \
+                                       'jpc', 'jp2', 'jpf', 'jb2', 'swc', 'aiff', 'wbmp', 'xbm', \
+                                       'tif', 'jfif', 'ras', 'cmx', 'ico', 'cod', 'pnm', \
+                                       'pbm', 'pgm', 'xwd', 'fh', 'wbmp', 'svg', 'aiff', 'webp'))
 
 
 def is_page_url(a_href):
@@ -187,7 +184,7 @@ def is_inline_resource(resource_content):
     :param resource_content:
     :return:
     """
-    return resource_content and resource_content.lower().startswith(("data:", ))
+    return resource_content and resource_content.lower().startswith(("data:",))
 
 
 async def send_template_mail(title, template_file, args, to_list):
@@ -204,7 +201,7 @@ async def send_template_mail(title, template_file, args, to_list):
 async def send_email2(title, content, to_list):
     # 三个参数：第一个为文本内容，第二个 plain 设置文本格式，第三个 utf-8 设置编码
     message = MIMEText(content, 'html', 'utf-8')
-    message['From'] = Header(f"template-spider.com <{SEND_MAIL['sender']}>", 'utf-8')
+    message['From'] = Header(f"{SEND_MAIL['sender']}", 'utf-8')
     message['To'] = Header("亲爱的用户", 'utf-8')
     message['Subject'] = Header(title, 'utf-8')
     try:
@@ -222,12 +219,12 @@ def get_file_name_from_url(url, duper, ext='css'):
     temp = urlparse(url)
     path = temp.path
     q = temp.query
-    if len(path)>1:
+    if len(path) > 1:
         base_file_name = os.path.basename(path)
     else:
         base_file_name = os.path.basename(q)
 
-    if len(base_file_name) <=0:
+    if len(base_file_name) <= 0:
         base_file_name = __get_uniq_timestr()
 
     p = re.compile("[\"'|\\/*:?<>]")
@@ -238,10 +235,10 @@ def get_file_name_from_url(url, duper, ext='css'):
 
     # 要处理那种名字一样但是url不一样的情况
     # 如果名字一样而url不一样那么一定要找到一个不一样的名字。
-    while base_file_name in duper.keys() and duper[base_file_name]!=url:
+    while base_file_name in duper.keys() and duper[base_file_name] != url:
         base_file_name = f'1_{base_file_name}'
 
-    duper[base_file_name]=url
+    duper[base_file_name] = url
 
     return base_file_name
 
@@ -253,7 +250,7 @@ def __get_inline_data_url_types(ext):
         return ext
 
 
-async def base64_encode_resource(css_path,   file_name):
+async def base64_encode_resource(css_path, file_name):
     """
     用base64编码文件
     :param file_path:
@@ -289,17 +286,17 @@ def to_framework_url_format(path, framework_name):
         return path
 
 
-if __name__=="__main__":
+if __name__ == "__main__":
     urls_test = [
-    "http://markup.themewagon.com/mountain_v_2.5.3/assets/lib/menuzord/css/menuzord.css",
-    "http://a.com?main.css?a=b;c=d;",
-    "http://a.com/a/b/c/xx-dd;a=c;b=d",
-    "http://res.weiunity.com/template/boke1/resource/fonts/icomoon.ttf?ngfxmq",
-    "https://upload.jianshu.io/users/upload_avatars/8739889/da9dcd2a-3a25-49fa-a0db-ed752b7bc6f8.png?imageMogr2/auto-orient/strip|imageView2/1/w/96/h/96'",
-    "https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800",
-    "https://www.googletagmanager.com/gtag/js?id=UA-122907869-1",
-    "https://fu.com/a/ttdd.html",
-    "http://g.alicdn.com/??kissy/k/6.2.4/seed-min.js,kg/global-util/1.0.7/index-min.js,tb/tracker/4.3.12/index.js,kg/tb-nav/2.5.3/index-min.js,secdev/sufei_data/3.3.5/index.js",
+        "http://markup.themewagon.com/mountain_v_2.5.3/assets/lib/menuzord/css/menuzord.css",
+        "http://a.com?main.css?a=b;c=d;",
+        "http://a.com/a/b/c/xx-dd;a=c;b=d",
+        "http://res.weiunity.com/template/boke1/resource/fonts/icomoon.ttf?ngfxmq",
+        "https://upload.jianshu.io/users/upload_avatars/8739889/da9dcd2a-3a25-49fa-a0db-ed752b7bc6f8.png?imageMogr2/auto-orient/strip|imageView2/1/w/96/h/96'",
+        "https://fonts.googleapis.com/css?family=Open+Sans:300,400,600,700,800",
+        "https://www.googletagmanager.com/gtag/js?id=UA-122907869-1",
+        "https://fu.com/a/ttdd.html",
+        "http://g.alicdn.com/??kissy/k/6.2.4/seed-min.js,kg/global-util/1.0.7/index-min.js,tb/tracker/4.3.12/index.js,kg/tb-nav/2.5.3/index-min.js,secdev/sufei_data/3.3.5/index.js",
     ]
     for u in urls_test:
         print(get_file_name_from_url(u, []))
