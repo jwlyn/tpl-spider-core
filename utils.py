@@ -200,27 +200,11 @@ async def send_template_mail(title, template_file, args, to_list):
     await send_email2(title, content, to_list)
 
 
-async def send_email(title, content, to_list):
-    # 三个参数：第一个为文本内容，第二个 plain 设置文本格式，第三个 utf-8 设置编码
-    message = MIMEText(content, 'html', 'utf-8')
-    message['From'] = Header(f"{SEND_MAIL['sender']}", 'utf-8')
-    message['To'] = Header("代理池管理员", 'utf-8')
-    message['Subject'] = Header(title, 'utf-8')
-
-    try:
-        smtpObj = SMTP_SSL(SEND_MAIL['smtp_host'], SEND_MAIL['smtp_port'])
-        smtpObj.login(SEND_MAIL['smtp_user'], SEND_MAIL['smtp_psw'])
-        smtpObj.sendmail(SEND_MAIL['sender'], to_list, message.as_string())
-        logger.info("Successfully sent email")
-    except Exception as e:
-        logger.error("Error: unable to send email")
-
-
 async def send_email2(title, content, to_list):
     # 三个参数：第一个为文本内容，第二个 plain 设置文本格式，第三个 utf-8 设置编码
     message = MIMEText(content, 'html', 'utf-8')
     message['From'] = Header(f"template-spider.com <{SEND_MAIL['sender']}>", 'utf-8')
-    message['To'] = Header(','.join(to_list), 'utf-8')
+    message['To'] = Header("Dear", 'utf-8')
     message['Subject'] = Header(title, 'utf-8')
     try:
         smtpObj = aiosmtplib.SMTP(hostname=SEND_MAIL['smtp_host'], port=SEND_MAIL['smtp_port'], use_tls=True)
