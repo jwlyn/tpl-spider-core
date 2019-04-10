@@ -178,10 +178,10 @@ def setup_schedule_task(n_days_age, search_parent_dir_list):
 
 
 async def main(base_craw_file_dir):
-    await asyncio.gather(SpiderTask().loop(base_craw_file_dir),
-                         SpiderTask().loop(base_craw_file_dir),
-                         SpiderTask().loop(base_craw_file_dir),
-                         SpiderTask().loop(base_craw_file_dir))
+    task = []
+    for i in range(0, config.max_loop_cnt):
+        task.append(SpiderTask().loop(base_craw_file_dir))
+    await asyncio.gather(*task)
 
 
 if __name__ == "__main__":

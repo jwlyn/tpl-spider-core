@@ -33,7 +33,7 @@ url_download_queue_timeout = 3  # 轮询一个url超时时间
 wait_url_sleep_time = 2  # 队列没有url时候等待多久
 wait_download_finish_sleep = 3  # 主线程等待任务完成的每次等待时间
 
-max_loop_cnt = 3  # 几个任务一起处理
+max_loop_cnt = 4  # 几个任务一起处理
 max_task_run_tm_seconds=5*60 #一个任务最多运行多久
 
 wait_db_task_interval_s=5
