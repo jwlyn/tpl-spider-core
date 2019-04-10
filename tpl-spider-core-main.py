@@ -88,13 +88,13 @@ class SpiderTask(object):
         """
         return await self.__get_task_by_sql(sql)
 
-    async def __update_task_status(self, task_id, zip_path, status='C'):
+    async def __update_task_status(self, task_id, status='C', zip_path=None, error=None):
         conn = await asyncpg.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
                                      host=dbconfig.db_url, )
 
         try:
             sql = f"""
-                update spider_task set status = '{status}', result='{zip_path}' where id = '{task_id}';
+                update spider_task set status = '{status}', result='{zip_path}', error={error} where id = '{task_id}';
             """
             await conn.execute(sql)
             logger.info("execute sql %s", sql)
@@ -130,7 +130,7 @@ class SpiderTask(object):
 
             seeds = task['seeds']
             task_id = task['id']
-            is_grab_out_site_link = task['is_grab_out_link'] #是否抓取外部站点资源
+            is_grab_out_site_link = task['is_grab_out_link']  # 是否抓取外部站点资源
             is_to_single_page = task['is_to_single_page']
             is_full_site = task['is_full_site']
             is_ref_model = task['is_ref_model']
@@ -150,13 +150,14 @@ class SpiderTask(object):
                 await asyncio.wait_for(spider.template_crawl(), timeout=config.max_task_run_tm_seconds)
                 template_zip_file = spider.zip_result_file
             except asyncio.TimeoutError:
-                # TODO #发给用户提示超时
-                await self.__update_task_status(task_id, "", "E")
+                await send_template_mail("your task is failed", 'email_template/task_fail.html')
+                await self.__update_task_status(task_id,  status="E", error="任务运行超过设定的最大运行时间")
                 continue
 
             logger.info("begin update task finished")
-            await self.__update_task_status(task_id, template_zip_file)
-            await send_template_mail("your template is ready", "email-download.html", {"{{template_id}}":task['file_id']}, task['email'])
+            await self.__update_task_status(task_id, status='C', zip_path=template_zip_file)
+            await send_template_mail("your template is ready", "email-download.html",
+                                     {"{{template_id}}": task['file_id']}, task['email'])
             logger.info("send email to %s, link: %s", task['email'], task['file_id'])
 
 
@@ -164,7 +165,8 @@ def setup_schedule_task(n_days_age, search_parent_dir_list):
     time_zone = timezone("Asia/Shanghai")
     scheduler = BackgroundScheduler(timezone=time_zone)
     trigger = CronTrigger.from_crontab(config.delete_file_cron, timezone=time_zone)
-    scheduler.add_job(clean_timeout_temp_dir_and_archive, trigger, kwargs={"n_day": n_days_age, "parent_dir_list":search_parent_dir_list})
+    scheduler.add_job(clean_timeout_temp_dir_and_archive, trigger,
+                      kwargs={"n_day": n_days_age, "parent_dir_list": search_parent_dir_list})
     # 启动时清理一下
     clean_timeout_temp_dir_and_archive(n_days_age, search_parent_dir_list)
 
@@ -177,12 +179,13 @@ async def main(base_craw_file_dir):
 
 
 if __name__ == "__main__":
-    logger.info("tpl-spider-web start, thread[%s]"% threading.current_thread().getName())
+    logger.info("tpl-spider-web start, thread[%s]" % threading.current_thread().getName())
     base_craw_file_dir = sys.argv[1]
     logger.info("基本目录是%s", base_craw_file_dir)
     if not base_craw_file_dir:
         logger.error("没有指明模版压缩文件的目录")
         exit(-1)
 
-    setup_schedule_task(config.delete_file_n_days_age, [f'{base_craw_file_dir}/{config.template_temp_dir}', f'{base_craw_file_dir}/{config.template_archive_dir}'])
+    setup_schedule_task(config.delete_file_n_days_age, [f'{base_craw_file_dir}/{config.template_temp_dir}',
+                                                        f'{base_craw_file_dir}/{config.template_archive_dir}'])
     asyncio.run(main(base_craw_file_dir))
