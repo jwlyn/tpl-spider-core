@@ -92,9 +92,9 @@ class SpiderTask(object):
         conn = await asyncpg.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
                                      host=dbconfig.db_url, )
         if zip_path is None:
-            zip_path = ""
+            zip_path = "null"
         if error is None:
-            error = ""
+            error = "null"
         try:
             sql = f"""
                 update spider_task set status = '{status}', result='{zip_path}', error={error} where id = '{task_id}';
