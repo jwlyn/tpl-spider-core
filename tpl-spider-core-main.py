@@ -17,7 +17,9 @@ from utils import send_template_mail
 
 
 class SpiderTask(object):
-
+    """
+    主要是从数据源选择数据，然后运行抓取工作。
+    """
     async def __get_task_by_sql(self, sql):
         conn = await asyncpg.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
                                      host=dbconfig.db_url, )
