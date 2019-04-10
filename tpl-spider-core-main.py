@@ -96,8 +96,9 @@ class SpiderTask(object):
             sql = f"""
                 update spider_task set status = '{status}', result='{zip_path}', error={error} where id = '{task_id}';
             """
-            await conn.execute(sql)
             logger.info("execute sql %s", sql)
+            await conn.execute(sql)
+            # logger.info("execute sql %s", sql)
         except Exception as e:
             logger.exception(e)
         finally:
@@ -156,7 +157,7 @@ class SpiderTask(object):
 
             logger.info("begin update task finished")
             await self.__update_task_status(task_id, status='C', zip_path=template_zip_file)
-            await send_template_mail("your template is ready", "email-download.html",
+            await send_template_mail("your template is ready", "email_template/email-download.html",
                                      {"{{template_id}}": task['file_id']}, task['email'])
             logger.info("send email to %s, link: %s", task['email'], task['file_id'])
 
