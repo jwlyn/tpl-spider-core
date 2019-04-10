@@ -91,7 +91,10 @@ class SpiderTask(object):
     async def __update_task_status(self, task_id, status='C', zip_path=None, error=None):
         conn = await asyncpg.connect(database=dbconfig.db_name, user=dbconfig.db_user, password=dbconfig.db_psw,
                                      host=dbconfig.db_url, )
-
+        if zip_path is None:
+            zip_path = ""
+        if error is None:
+            error = ""
         try:
             sql = f"""
                 update spider_task set status = '{status}', result='{zip_path}', error={error} where id = '{task_id}';
