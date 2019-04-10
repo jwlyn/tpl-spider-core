@@ -136,6 +136,7 @@ class SpiderTask(object):
 
             seeds = task['seeds']
             task_id = task['id']
+            email = task['email']
             is_grab_out_site_link = task['is_grab_out_link']  # 是否抓取外部站点资源
             is_to_single_page = task['is_to_single_page']
             is_full_site = task['is_full_site']
@@ -156,13 +157,13 @@ class SpiderTask(object):
                 await asyncio.wait_for(spider.template_crawl(), timeout=config.max_task_run_tm_seconds)
                 template_zip_file = spider.zip_result_file
             except asyncio.TimeoutError:
-                await send_template_mail("your task is failed", 'email_template/task_fail.html')
+                await send_template_mail("your task is failed", 'email_template/task_fail.html', {}, email)
                 await self.__update_task_status(task_id,  status="E", error="任务运行超过设定的最大运行时间")
                 continue
 
             logger.info("begin update task finished")
             await self.__update_task_status(task_id, status='C', zip_path=template_zip_file)
-            await send_template_mail("your template is ready", "email_template/email-download.html",
+            await send_template_mail("your template is ready", "email_template/email_download.html",
                                      {"{{template_id}}": task['file_id']}, task['email'])
             logger.info("send email to %s, link: %s", task['email'], task['file_id'])
 
