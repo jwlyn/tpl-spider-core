@@ -186,6 +186,12 @@ async def main(base_craw_file_dir):
 
 
 if __name__ == "__main__":
+    try:
+        import uvloop
+        asyncio.set_event_loop_policy(uvloop.EventLoopPolicy())
+    except:
+        pass
+
     logger.info("tpl-spider-web start, thread[%s]" % threading.current_thread().getName())
     base_craw_file_dir = sys.argv[1]
     logger.info("基本目录是%s", base_craw_file_dir)
